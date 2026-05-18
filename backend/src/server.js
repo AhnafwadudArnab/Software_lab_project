@@ -15,12 +15,14 @@ const app = express();
 
 app.use(helmet());
 
-// Fix #12: only include localhost dev origins in non-production environments
+// Use FRONTEND_URL for production and allow optional dev origins via CORS_DEV_ORIGINS
 const productionOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
   .split(',').map(o => o.trim());
-const devOrigins = process.env.NODE_ENV !== 'production'
-  ? ['http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177']
-  : [];
+const devOrigins = [];
+if (process.env.NODE_ENV !== 'production') {
+  const devList = process.env.CORS_DEV_ORIGINS || 'http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177';
+  devOrigins.push(...devList.split(',').map(o => o.trim()));
+}
 const allowedOrigins = [...productionOrigins, ...devOrigins];
 
 app.use(cors({
