@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently --names \"API,FACE\" --prefix-colors \"green,cyan\" \"nodemon --exec \\\"node --dns-result-order=ipv4first\\\" src/server.js\" \"python ../insightface-server/app.py\"",
-    "start": "node --dns-result-order=ipv4first src/server.js",
+    "dev": "concurrently --names \"API,FACE\" --prefix-colors \"green,cyan\" \"nodemon src/server.js\" \"python ../insightface-server/app.py\"",
+    "start": "node src/server.js",
     "db:init": "psql \"$DATABASE_URL\" -f schema.sql",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },

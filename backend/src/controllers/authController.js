@@ -8,7 +8,9 @@ const registerSchema = z.object({
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
   phone: z.string().optional(),
   password: z.string().min(6),
-  role: z.literal('guardian').default('guardian')
+  // Public registration always creates 'admin' role (the only public-facing role in this system)
+  // Police accounts are created by admin via POST /api/admin/police
+  role: z.literal('admin').default('admin')
 });
 
 const loginSchema = z.object({

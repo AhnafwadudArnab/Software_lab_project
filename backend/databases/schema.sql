@@ -235,9 +235,9 @@ INSERT INTO missing_persons (
   'active'
 );
 
--- ── Seed person images ────────────────────────────────────────
+-- ── Seed person images (South Asian / Bangladeshi-looking portraits) ──
 INSERT INTO person_images (missing_person_id, image_url) VALUES
-  ('missing-report_001', 'https://randomuser.me/api/portraits/women/65.jpg'),
-  ('missing-report_002', 'https://randomuser.me/api/portraits/women/44.jpg'),
-  ('missing-report_003', 'https://randomuser.me/api/portraits/men/42.jpg'),
-  ('missing-report_004', 'https://randomuser.me/api/portraits/men/14.jpg');
+  ('missing-report_001', 'https://xsgames.co/randomusers/assets/avatars/female/46.jpg'),
+  ('missing-report_002', 'https://xsgames.co/randomusers/assets/avatars/female/29.jpg'),
+  ('missing-report_003', 'https://xsgames.co/randomusers/assets/avatars/male/34.jpg'),
+  ('missing-report_004', 'https://xsgames.co/randomusers/assets/avatars/male/17.jpg');

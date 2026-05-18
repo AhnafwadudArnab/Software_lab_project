@@ -1871,7 +1871,49 @@ th {
   }
 
   .db-sidebar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    min-height: unset;
+    height: auto;
+  }
+
+  .db-sidebar-header {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border-bottom: none;
+    border-right: 1px solid rgba(255,255,255,.15);
+    margin-right: 4px;
+  }
+
+  .db-nav {
+    flex-direction: row;
+    flex-shrink: 0;
+    gap: 4px;
+  }
+
+  .db-nav-item {
+    white-space: nowrap;
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .db-sidebar-stats,
+  .db-admin-stats {
     display: none;
+  }
+
+  .db-sidebar .btn.full {
+    flex-shrink: 0;
+    width: auto;
+    margin-top: 0;
+    white-space: nowrap;
+    padding: 8px 14px;
+    font-size: 13px;
   }
 
   .db-stats-grid {
@@ -2166,6 +2208,7 @@ th {
 .home-section-inner {
   max-width: 1100px;
   margin: 0 auto;
+  text-align: center;
 }
 
 .home-section-label {
@@ -2205,6 +2248,7 @@ th {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 24px;
+  text-align: left;
 }
 
 .home-step {
@@ -2262,11 +2306,13 @@ th {
 
 .home-alerts-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 16px;
   margin-bottom: 28px;
   flex-wrap: wrap;
+  text-align: center;
 }
 
 .home-cards-grid {
@@ -2301,6 +2347,7 @@ th {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 18px;
+  text-align: left;
 }
 
 .home-feature-card {
@@ -2310,6 +2357,7 @@ th {
   padding: 26px 22px;
   transition: transform .2s, box-shadow .2s;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .04);
+  text-align: left;
 }
 
 .home-feature-card:hover {

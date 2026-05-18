@@ -30,7 +30,7 @@ export default function ActionButtons({ type, id, currentStatus, onAction }) {
           await api.patch(`/cases/${id}/status`, { status: 'rejected' });
           finish('rejected', 'Case rejected ❌');
         } else if (action === 'request_info') {
-          await api.post(`/admin/notify/${id}`, { message: 'Please provide additional information for your case.' });
+          await api.post(`/cases/${id}/request-info`, { notes: 'Please provide additional information for your case.' });
           finish(currentStatus, 'Info requested 📩');
         }
       } else if (type === 'sighting') {

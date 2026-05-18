@@ -129,14 +129,12 @@ export default function Home() {
       {/* ── RECENT ALERTS ── */}
       <section className="home-section home-alerts-section">
         <div className="home-section-inner">
-          <div className="home-section-label">{t('home.recent_label')}</div>
           <div className="home-alerts-header">
-            <div>
-              <h2 className="home-section-title" style={{ marginBottom: 4 }}>{t('home.recent_title')}</h2>
-              <p className="home-section-sub" style={{ marginTop: 0, marginBottom: 0 }}>
-                {t('home.recent_sub')}
-              </p>
-            </div>
+            <div className="home-section-label">{t('home.recent_label')}</div>
+            <h2 className="home-section-title" style={{ marginBottom: 4 }}>{t('home.recent_title')}</h2>
+            <p className="home-section-sub" style={{ marginTop: 0, marginBottom: 16 }}>
+              {t('home.recent_sub')}
+            </p>
             <Link className="home-btn-secondary" to="/cases">{t('home.view_all')}</Link>
           </div>
 

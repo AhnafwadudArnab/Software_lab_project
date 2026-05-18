@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import PoliceCaseCard from '../components/PoliceCaseCard';
@@ -38,11 +38,59 @@ function ScoreBar({ score }) {
   );
 }
 
+// ── Icon helpers ──────────────────────────────────────────────
+const IconEye = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+const IconBell = ({ unread }) => (
+  <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
+    </svg>
+    {unread > 0 && (
+      <span style={{ position: 'absolute', top: -5, right: -7, background: '#dc2626', color: '#fff', borderRadius: 999, fontSize: 9, fontWeight: 800, padding: '1px 4px', lineHeight: 1.4 }}>{unread}</span>
+    )}
+  </span>
+);
+const IconSighting = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </svg>
+);
+const IconScan = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 9V5a2 2 0 012-2h4"/><path d="M15 3h4a2 2 0 012 2v4"/>
+    <path d="M21 15v4a2 2 0 01-2 2h-4"/><path d="M9 21H5a2 2 0 01-2-2v-4"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+
 export default function PoliceDashboard() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('cases');
   const [cases, setCases] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('');
   const [actionError, setActionError] = useState('');
+
+  // Notifications state
+  const [notifications, setNotifications] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  // Sightings state
+  const [sightingsError, setSightingsError] = useState('');
+  const [matchResults, setMatchResults] = useState(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchCaseId, setMatchCaseId] = useState('');
+
+  // Police update notes state
+  const [updatesCaseId, setUpdatesCaseId] = useState('');
+  const [updates, setUpdates] = useState([]);
+  const [updatesLoading, setUpdatesLoading] = useState(false);
+  const [updatesError, setUpdatesError] = useState('');
+  const [newUpdateText, setNewUpdateText] = useState('');
+  const [submittingUpdate, setSubmittingUpdate] = useState(false);
 
   // Face scan state
   const [scanImage, setScanImage] = useState(null);
@@ -52,11 +100,34 @@ export default function PoliceDashboard() {
   const [scanError, setScanError] = useState('');
   const fileRef = useRef(null);
 
+  // Load cases
   useEffect(() => {
-    api.get('/cases')
+    const params = statusFilter ? `?status=${statusFilter}` : '';
+    api.get(`/cases${params}`)
       .then(r => setCases(r.data))
       .catch(err => console.error('Failed to load cases:', err));
+  }, [statusFilter]);
+
+  // Load notifications when tab opens
+  const loadNotifications = useCallback(() => {
+    setNotifLoading(true);
+    api.get('/notifications')
+      .then(r => setNotifications(r.data))
+      .catch(() => {})
+      .finally(() => setNotifLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'notifications') loadNotifications();
+  }, [activeTab, loadNotifications]);
+
+  // Load sightings cases list when sightings tab opens (reuses cases state)
+  useEffect(() => {
+    if (activeTab !== 'sightings') return;
+    if (cases.length === 0) {
+      api.get('/cases').then(r => setCases(r.data)).catch(() => {});
+    }
+  }, [activeTab]);
 
   async function handleStatusUpdate(id, status) {
     setActionError('');
@@ -66,6 +137,61 @@ export default function PoliceDashboard() {
     } catch (err) {
       setActionError(err.response?.data?.message || 'Failed to update status');
     }
+  }
+
+  async function handleMatchSightings(caseId) {
+    setMatchCaseId(caseId);
+    setMatchLoading(true);
+    setMatchResults(null);
+    try {
+      const r = await api.get(`/sightings/match/${caseId}`);
+      setMatchResults(r.data);
+    } catch (err) {
+      setSightingsError(err.response?.data?.message || 'Failed to load sightings');
+    }
+    setMatchLoading(false);
+  }
+
+  async function markNotifRead(id) {
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    } catch {}
+  }
+
+  async function markAllRead() {
+    try {
+      await api.patch('/notifications/read-all');
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch {}
+  }
+
+  async function loadUpdates(caseId) {
+    if (!caseId) return;
+    setUpdatesLoading(true);
+    setUpdatesError('');
+    try {
+      const r = await api.get(`/admin/cases/${caseId}/updates`);
+      setUpdates(r.data || []);
+    } catch {
+      setUpdatesError('Updates load করা যায়নি।');
+    }
+    setUpdatesLoading(false);
+  }
+
+  async function submitUpdate(e) {
+    e.preventDefault();
+    if (!newUpdateText.trim() || !updatesCaseId) return;
+    setSubmittingUpdate(true);
+    setUpdatesError('');
+    try {
+      const r = await api.post(`/admin/cases/${updatesCaseId}/updates`, { update_text: newUpdateText });
+      setUpdates(prev => [r.data, ...prev]);
+      setNewUpdateText('');
+    } catch (err) {
+      setUpdatesError(err.response?.data?.message || 'Update submit করা যায়নি।');
+    }
+    setSubmittingUpdate(false);
   }
 
   function handlePhotoSelect(e) {
@@ -102,12 +228,13 @@ export default function PoliceDashboard() {
   }
 
   const activeCases = cases.filter(c => ['active', 'verified'].includes(c.status)).length;
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <>
       <Navbar />
       <div className="db-wrapper">
-        {/* Sidebar */}
+        {/* ── Sidebar ── */}
         <aside className="db-sidebar">
           <div className="db-sidebar-header">
             <div className="db-avatar">{user?.name?.[0]?.toUpperCase()}</div>
@@ -120,8 +247,17 @@ export default function PoliceDashboard() {
             <button className={`db-nav-item ${activeTab === 'cases' ? 'active' : ''}`} onClick={() => setActiveTab('cases')}>
               <IconClipboard /> Cases
             </button>
+            <button className={`db-nav-item ${activeTab === 'sightings' ? 'active' : ''}`} onClick={() => setActiveTab('sightings')}>
+              <IconSighting /> Sightings
+            </button>
+            <button className={`db-nav-item ${activeTab === 'updates' ? 'active' : ''}`} onClick={() => setActiveTab('updates')}>
+              <IconClipboard /> Case Updates
+            </button>
+            <button className={`db-nav-item ${activeTab === 'notifications' ? 'active' : ''}`} onClick={() => setActiveTab('notifications')}>
+              <IconBell unread={unreadCount} /> Notifications
+            </button>
             <button className={`db-nav-item ${activeTab === 'scan' ? 'active' : ''}`} onClick={() => setActiveTab('scan')}>
-              Face Scan
+              <IconScan /> Face Scan
             </button>
           </nav>
           <div className="db-sidebar-stats">
@@ -133,10 +269,16 @@ export default function PoliceDashboard() {
               <span>Total</span>
               <b>{cases.length}</b>
             </div>
+            {unreadCount > 0 && (
+              <div className="db-stat-row">
+                <span>Unread Alerts</span>
+                <b style={{ color: '#fcd34d' }}>{unreadCount}</b>
+              </div>
+            )}
           </div>
         </aside>
 
-        {/* Main content */}
+        {/* ── Main content ── */}
         <main className="db-main">
           {actionError && (
             <div role="alert" style={{ background: 'var(--red-light)', border: '1px solid var(--red)', borderRadius: 10, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, color: 'var(--red-dark)', fontWeight: 600, fontSize: 14 }}>
@@ -150,18 +292,266 @@ export default function PoliceDashboard() {
             <>
               <div className="db-header">
                 <div>
-                  <h1 className="db-title">Active Cases</h1>
-                  <p className="db-subtitle">Missing persons under active investigation</p>
+                  <h1 className="db-title">Cases</h1>
+                  <p className="db-subtitle">Missing persons under investigation</p>
                 </div>
-              </div>
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value)}
+                  style={{ padding: '9px 14px', borderRadius: 10, border: '1.5px solid var(--border)', fontSize: 13, fontWeight: 600, background: 'white', cursor: 'pointer', minWidth: 150 }}
+                >
+                  <option value="">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="verified">Verified</option>
+                  <option value="pending">Pending</option>
+                  <option value="found">Found</option>
+                  <option value="closed">Closed</option>
+                  <option value="rejected">Rejected</option>
+                </select>              </div>
               {cases.length === 0 ? (
-                <div className="db-empty">
-                  <p>No active cases assigned</p>
-                </div>
+                <div className="db-empty"><p>No cases found</p></div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
                   {cases.map(item => (
                     <PoliceCaseCard key={item.id} item={item} onStatusUpdate={handleStatusUpdate} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── SIGHTINGS TAB ── */}
+          {activeTab === 'sightings' && (
+            <>
+              <div className="db-header">
+                <div>
+                  <h1 className="db-title">Sightings</h1>
+                  <p className="db-subtitle">Match witness sightings to a missing person case</p>
+                </div>
+              </div>
+
+              <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', marginBottom: 20 }}>
+                <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 14 }}>Select a case to view matched sightings:</p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select
+                    value={matchCaseId}
+                    onChange={e => setMatchCaseId(e.target.value)}
+                    style={{ flex: 1, minWidth: 220, padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--border)', fontSize: 13, background: 'white' }}
+                  >
+                    <option value="">-- Choose a case --</option>
+                    {cases.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.status}) — {c.id}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => matchCaseId && handleMatchSightings(matchCaseId)}
+                    disabled={!matchCaseId || matchLoading}
+                    style={{ padding: '10px 22px', borderRadius: 10, background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 700, fontSize: 13, cursor: matchCaseId ? 'pointer' : 'not-allowed', opacity: matchCaseId ? 1 : 0.5 }}
+                  >
+                    {matchLoading ? 'Loading...' : 'Load Sightings'}
+                  </button>
+                </div>
+              </div>
+
+              {sightingsError && (
+                <div style={{ color: 'var(--red)', background: 'var(--red-light)', border: '1px solid var(--red)', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 14 }}>{sightingsError}</div>
+              )}
+
+              {matchResults && (
+                <div className="db-section">
+                  <div className="db-section-header" style={{ marginBottom: 16 }}>
+                    <h2 className="db-section-title" style={{ margin: 0 }}>
+                      Sightings for: {matchResults.case?.name}
+                    </h2>
+                    <span className="db-count-badge">{matchResults.matches?.length || 0} sightings</span>
+                  </div>
+
+                  {matchResults.matches?.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
+                      <p>No sightings reported for this case yet.</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {matchResults.matches.map(s => (
+                        <div key={s.id} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span className={`badge ${s.status}`}>{s.status}</span>
+                              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(s.created_at).toLocaleDateString()}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: s.confidence_level === 'sure' ? '#16a34a' : s.confidence_level === 'maybe' ? '#d97706' : '#6b7280' }}>
+                                {s.confidence_level === 'sure' ? '✓ Sure' : s.confidence_level === 'maybe' ? '~ Maybe' : '? Not sure'}
+                              </span>
+                            </div>
+                            {s.ai_match_score !== undefined && (
+                              <span style={{ fontSize: 12, fontWeight: 700, background: s.ai_match_score >= 60 ? '#d1fae5' : '#f3f4f6', color: s.ai_match_score >= 60 ? '#065f46' : '#374151', padding: '3px 10px', borderRadius: 999 }}>
+                                AI Match: {s.ai_match_score}%
+                              </span>
+                            )}
+                          </div>
+                          <p style={{ margin: '0 0 6px', fontSize: 14 }}>{s.description}</p>
+                          {s.location_text && (
+                            <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>
+                              📍 {s.location_text}
+                            </p>
+                          )}
+                          {s.image_url && (
+                            <img src={s.image_url} alt="Sighting" style={{ marginTop: 10, height: 100, borderRadius: 8, objectFit: 'cover' }} />
+                          )}
+                          {s.reporter_name && (
+                            <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--muted)' }}>Reported by: {s.reporter_name}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── UPDATES TAB ── */}
+          {activeTab === 'updates' && (
+            <>
+              <div className="db-header">
+                <div>
+                  <h1 className="db-title">Case Updates</h1>
+                  <p className="db-subtitle">Add and view investigation notes for a case</p>
+                </div>
+              </div>
+
+              {/* Case selector */}
+              <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', marginBottom: 20 }}>
+                <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 14 }}>Select a case:</p>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select
+                    value={updatesCaseId}
+                    onChange={e => { setUpdatesCaseId(e.target.value); setUpdates([]); }}
+                    style={{ flex: 1, minWidth: 220, padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--border)', fontSize: 13, background: 'white' }}
+                  >
+                    <option value="">-- Choose a case --</option>
+                    {cases.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.status}) — {c.id}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => loadUpdates(updatesCaseId)}
+                    disabled={!updatesCaseId || updatesLoading}
+                    style={{ padding: '10px 22px', borderRadius: 10, background: 'var(--primary)', color: '#fff', border: 'none', fontWeight: 700, fontSize: 13, cursor: updatesCaseId ? 'pointer' : 'not-allowed', opacity: updatesCaseId ? 1 : 0.5 }}
+                  >
+                    {updatesLoading ? 'Loading...' : 'Load Updates'}
+                  </button>
+                </div>
+              </div>
+
+              {updatesError && (
+                <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 14 }}>{updatesError}</div>
+              )}
+
+              {/* Add new update form */}
+              {updatesCaseId && (
+                <form onSubmit={submitUpdate} style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', marginBottom: 20 }}>
+                  <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 14 }}>Add Investigation Note:</p>
+                  <textarea
+                    value={newUpdateText}
+                    onChange={e => setNewUpdateText(e.target.value)}
+                    placeholder="Write your investigation update here..."
+                    required
+                    rows={3}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--border)', fontSize: 13, resize: 'vertical', boxSizing: 'border-box', marginBottom: 10 }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={submittingUpdate || !newUpdateText.trim()}
+                    style={{ padding: '9px 22px', borderRadius: 10, background: '#16a34a', color: '#fff', border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: submittingUpdate ? 0.6 : 1 }}
+                  >
+                    {submittingUpdate ? 'Submitting...' : '+ Add Note'}
+                  </button>
+                </form>
+              )}
+
+              {/* Updates list */}
+              {updates.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {updates.map(u => (
+                    <div key={u.id} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                          {u.officer_name || 'Unknown Officer'}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                          {new Date(u.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 14, color: 'var(--text)', lineHeight: 1.6 }}>{u.update_text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {updatesCaseId && !updatesLoading && updates.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
+                  No updates yet for this case.
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── NOTIFICATIONS TAB ── */}
+          {activeTab === 'notifications' && (
+            <>
+              <div className="db-header">
+                <div>
+                  <h1 className="db-title">Notifications</h1>
+                  <p className="db-subtitle">Alerts and updates for your cases</p>
+                </div>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllRead}
+                    style={{ padding: '9px 18px', borderRadius: 10, background: 'white', color: 'var(--green)', border: '1.5px solid var(--green)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                  >
+                    Mark all as read
+                  </button>
+                )}
+              </div>
+
+              {notifLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)' }}>Loading notifications...</div>
+              ) : notifications.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
+                  <p style={{ marginTop: 12 }}>No notifications yet.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {notifications.map(n => (
+                    <div
+                      key={n.id}
+                      onClick={() => !n.read && markNotifRead(n.id)}
+                      style={{
+                        background: n.read ? 'white' : '#f0fdf4',
+                        border: `1px solid ${n.read ? 'var(--border)' : '#86efac'}`,
+                        borderRadius: 12,
+                        padding: '14px 18px',
+                        cursor: n.read ? 'default' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 14,
+                        transition: 'background .15s',
+                      }}
+                    >
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: n.read ? 'transparent' : '#16a34a', marginTop: 6, flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: n.read ? 400 : 700 }}>{n.message}</p>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(n.created_at).toLocaleString()}</span>
+                          {n.case_id && (
+                            <Link to={`/cases/${n.case_id}`} style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              View Case
+                            </Link>
+                          )}
+                          <span style={{ fontSize: 11, background: '#f3f4f6', color: '#374151', padding: '2px 8px', borderRadius: 999, fontWeight: 600 }}>{n.type}</span>
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

@@ -347,7 +347,7 @@ export default function Dashboard() {
             <button className={`db-nav-item ${activeTab === 'cases' ? 'active' : ''}`} onClick={() => setActiveTab('cases')}>
               {t('dash.cases')}
             </button>
-            {user.role === 'admin' && (
+            {['admin', 'police'].includes(user.role) && (
               <button className={`db-nav-item ${activeTab === 'scan' ? 'active' : ''}`} onClick={() => setActiveTab('scan')}>
                 {t('dash.scan')}
               </button>

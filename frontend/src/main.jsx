@@ -11,6 +11,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import PoliceDashboard from './pages/PoliceDashboard';
 import ReportCase from './pages/ReportCase';
 import CaseDetails from './pages/CaseDetails';
 import SubmitSighting from './pages/SubmitSighting';
@@ -35,8 +36,18 @@ createRoot(document.getElementById('root')).render(
               <Route path="/cases/:id" element={<CaseDetails />} />
               <Route path="/sightings" element={<Sightings />} />
               <Route path="/sighting/:id?" element={<SubmitSighting />} />
-              <Route path="/report" element={<ProtectedRoute><ReportCase /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/report" element={<ReportCase />} />
+              {/* Role-based dashboards */}
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/police" element={
+                <ProtectedRoute>
+                  <PoliceDashboard />
+                </ProtectedRoute>
+              } />
             </Routes>
           </BrowserRouter>
         </OfflineQueueProvider>

@@ -3,6 +3,48 @@ import { z } from 'zod';
 import { query } from '../config/db.js';
 import { compareFacesWithInsightFace, isInsightFaceConfigured } from '../utils/insightFace.js';
 
+// ── Police Updates ────────────────────────────────────────────
+
+/**
+ * POST /api/admin/cases/:id/updates
+ * Police or admin adds a text update note to a case.
+ */
+export async function addPoliceUpdate(req, res, next) {
+  try {
+    const schema = z.object({ update_text: z.string().min(3) });
+    const { update_text } = schema.parse(req.body);
+    const { id } = req.params;
+
+    const caseCheck = await query('SELECT id FROM missing_persons WHERE id=$1', [id]);
+    if (!caseCheck.rows[0]) return res.status(404).json({ message: 'Case not found' });
+
+    const result = await query(
+      'INSERT INTO police_updates (missing_person_id, police_id, update_text) VALUES ($1,$2,$3) RETURNING *',
+      [id, req.user.id, update_text]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) { next(e); }
+}
+
+/**
+ * GET /api/admin/cases/:id/updates
+ * List all police update notes for a case.
+ */
+export async function getPoliceUpdates(req, res, next) {
+  try {
+    const { id } = req.params;
+    const result = await query(
+      `SELECT pu.*, u.name AS officer_name
+       FROM police_updates pu
+       LEFT JOIN users u ON u.id = pu.police_id
+       WHERE pu.missing_person_id = $1
+       ORDER BY pu.created_at DESC`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (e) { next(e); }
+}
+
 export async function stats(req, res, next) {
   try {
     const users = await query('SELECT COUNT(*)::int total FROM users');
@@ -41,11 +83,13 @@ export async function scanFaces(req, res, next) {
       });
     }
 
+    // Only scan active/verified cases — no point matching against found/closed/rejected
     const result = await query(
       'SELECT mp.id, mp.name, mp.status, mp.age, mp.gender, mp.last_seen_location, ' +
       'COALESCE(json_agg(DISTINCT pi.image_url) FILTER (WHERE pi.image_url IS NOT NULL), \'[]\') AS images ' +
       'FROM missing_persons mp ' +
       'LEFT JOIN person_images pi ON pi.missing_person_id = mp.id ' +
+      "WHERE mp.status IN ('active','verified') " +
       'GROUP BY mp.id ORDER BY mp.created_at DESC'
     );
 

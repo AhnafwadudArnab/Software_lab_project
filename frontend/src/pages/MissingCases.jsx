@@ -6,7 +6,8 @@ import MapView from '../components/MapView';
 import { api } from '../api/client';
 import { useLang } from '../context/LangContext';
 
-const STATUSES = ['all', 'active', 'verified', 'pending', 'found', 'closed'];
+// Public-visible statuses only — backend never returns pending/rejected to anonymous users
+const STATUSES = ['all', 'active', 'verified', 'found', 'closed'];
 
 function getDistricts(cases) {
   const set = new Set();

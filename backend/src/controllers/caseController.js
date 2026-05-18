@@ -30,6 +30,7 @@ const PUBLIC_STATUSES = ['active', 'verified', 'found', 'closed'];
 export async function listCases(req, res, next) {
   try {
     const status = req.query.status;
+    const mine = req.query.mine === 'true';
     const user = req.user;
 
     // Admin/police: see all cases, optionally filtered by status
@@ -44,6 +45,18 @@ export async function listCases(req, res, next) {
       }
       sql += ' GROUP BY mp.id ORDER BY mp.created_at DESC';
       const result = await query(sql, params);
+      return res.json(result.rows);
+    }
+
+    // Logged-in user requesting only their own cases
+    if (user && mine) {
+      const result = await query(
+        'SELECT mp.*, COALESCE(json_agg(pi.image_url) FILTER (WHERE pi.image_url IS NOT NULL), \'[]\') AS images ' +
+        'FROM missing_persons mp LEFT JOIN person_images pi ON pi.missing_person_id = mp.id ' +
+        'WHERE mp.guardian_id=$1 ' +
+        'GROUP BY mp.id ORDER BY mp.created_at DESC',
+        [user.id]
+      );
       return res.json(result.rows);
     }
 
@@ -75,10 +88,8 @@ export async function getCase(req, res, next) {
     const user = req.user;
     const c = result.rows[0];
 
-    // Police may only access active/verified cases
-    if (user?.role === 'police' && !['active', 'verified'].includes(c.status)) {
-      return res.status(403).json({ message: 'Police may only access active cases' });
-    }
+    // Police may access all cases (they need to see found/closed cases they worked on)
+    // Only truly restrict non-authenticated public access via PUBLIC_STATUSES in listCases
 
     // Admin/police see all sightings; everyone else sees only verified sightings
     const isPrivileged = user && (user.role === 'admin' || user.role === 'police');
@@ -114,15 +125,16 @@ export async function createCase(req, res, next) {
       'INSERT INTO missing_persons ' +
       '(reporter_name,reporter_phone,reporter_relation,name,name_bn,age,gender,skin_color,height,weight,' +
       'clothing,identifying_marks,medical_info,description,last_seen_location,last_seen_lat,last_seen_lng,' +
-      'last_seen_time,status,ai_verification_score,ai_flags) ' +
-      'VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *',
+      'last_seen_time,status,ai_verification_score,ai_flags,guardian_id) ' +
+      'VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *',
       [
         data.reporter_name, data.reporter_phone, data.reporter_relation,
         data.name, data.name_bn || null, data.age || null, data.gender || null,
         data.skin_color || null, data.height || null, data.weight || null,
         data.clothing || null, data.identifying_marks || null, data.medical_info || null,
         data.description || null, data.last_seen_location, data.last_seen_lat, data.last_seen_lng,
-        data.last_seen_time || null, status, aiScore, aiFlags
+        data.last_seen_time || null, status, aiScore, aiFlags,
+        req.user?.id || null,  // guardian_id — set if user is logged in
       ]
     );
     const created = result.rows[0];

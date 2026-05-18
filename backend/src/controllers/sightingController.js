@@ -147,3 +147,118 @@ export async function getSightingAudit(req, res, next) {
     res.json(result.rows);
   } catch (e) { next(e); }
 }
+
+// GET /sightings/history/:caseId
+// একটা case এর সব verified sighting + face scan result history
+// Public endpoint — anonymous user রাও দেখতে পারবে
+export async function getSightingHistory(req, res, next) {
+  try {
+    const { caseId } = req.params;
+
+    // Case exists কিনা check করো
+    const caseCheck = await query(
+      'SELECT id, name, status FROM missing_persons WHERE id=$1',
+      [caseId]
+    );
+    if (!caseCheck.rows[0]) {
+      return res.status(404).json({ message: 'Case not found' });
+    }
+
+    const isPrivileged = req.user && (req.user.role === 'admin' || req.user.role === 'police');
+
+    // Privileged users সব sighting দেখবে, public শুধু verified দেখবে
+    const statusFilter = isPrivileged
+      ? ''
+      : "AND s.status = 'verified'";
+
+    const result = await query(
+      `SELECT
+        s.id                  AS sighting_id,
+        s.missing_person_id,
+        s.reporter_name,
+        s.location_text,
+        s.lat,
+        s.lng,
+        s.description,
+        s.image_url,
+        s.confidence_level,
+        s.status              AS sighting_status,
+        s.ai_score,
+        s.created_at          AS sighted_at,
+        fs.id                 AS scan_id,
+        fs.face_match_score,
+        fs.scan_status,
+        fs.scanned_image_url,
+        fs.created_at         AS scanned_at,
+        mp.name               AS matched_person_name,
+        mp.last_seen_location AS matched_person_last_seen
+      FROM sightings s
+      LEFT JOIN sighting_face_scans fs ON fs.sighting_id = s.id
+      LEFT JOIN missing_persons mp     ON mp.id = fs.matched_person_id
+      WHERE s.missing_person_id = $1
+      ${statusFilter}
+      ORDER BY s.created_at DESC`,
+      [caseId]
+    );
+
+    res.json({
+      case_id: caseId,
+      case_name: caseCheck.rows[0].name,
+      case_status: caseCheck.rows[0].status,
+      total: result.rows.length,
+      history: result.rows,
+    });
+  } catch (e) { next(e); }
+}
+
+// POST /sightings/:sightingId/face-scan
+// Face scan result save করো (system/admin call করবে)
+export async function saveFaceScanResult(req, res, next) {
+  try {
+    const { sightingId } = req.params;
+    const schema = z.object({
+      matched_person_id:  z.string().optional().nullable(),
+      face_match_score:   z.coerce.number().min(0).max(100).optional().nullable(),
+      scan_status:        z.enum(['matched', 'no_match', 'low_confidence', 'error']),
+      scanned_image_url:  z.string().url().optional().nullable(),
+      scan_metadata:      z.record(z.unknown()).optional().nullable(),
+    });
+
+    const data = schema.parse(req.body);
+
+    // Sighting exists কিনা check
+    const sightingCheck = await query('SELECT id, missing_person_id FROM sightings WHERE id=$1', [sightingId]);
+    if (!sightingCheck.rows[0]) {
+      return res.status(404).json({ message: 'Sighting not found' });
+    }
+
+    const result = await query(
+      `INSERT INTO sighting_face_scans
+        (sighting_id, matched_person_id, face_match_score, scan_status, scanned_image_url, scan_metadata, scanned_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [
+        sightingId,
+        data.matched_person_id || null,
+        data.face_match_score ?? null,
+        data.scan_status,
+        data.scanned_image_url || null,
+        data.scan_metadata ? JSON.stringify(data.scan_metadata) : null,
+        req.user?.id || null,
+      ]
+    );
+
+    // যদি match হয়, sighting status verified করে দাও
+    if (data.scan_status === 'matched' && data.face_match_score >= 70) {
+      await query('UPDATE sightings SET status=$1 WHERE id=$2', ['verified', sightingId]);
+    }
+
+    await query(
+      'INSERT INTO audit_logs (user_id,action,target_type,target_id,notes) VALUES ($1,$2,$3,$4,$5)',
+      [req.user?.id || null, `Face scan result saved: ${data.scan_status}`, 'sighting', sightingId,
+       data.face_match_score ? `Score: ${data.face_match_score}` : null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (e) { next(e); }
+}

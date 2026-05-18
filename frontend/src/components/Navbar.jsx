@@ -101,7 +101,10 @@ export default function Navbar() {
 
           {user ? (
             <>
-              <Link to="/dashboard" style={isActive('/dashboard') ? { color: 'var(--text)' } : {}}>
+              <Link
+                to={user.role === 'police' ? '/police' : '/dashboard'}
+                style={isActive('/dashboard') || isActive('/police') ? { color: 'var(--text)' } : {}}
+              >
                 {t('nav.dashboard')}
               </Link>
               <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{user.name}</span>

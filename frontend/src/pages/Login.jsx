@@ -21,8 +21,13 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      nav(redirect);
+      const loggedInUser = await login(email, password);
+      // Role-based redirect: police → /police, others → redirect param or /dashboard
+      if (loggedInUser.role === 'police') {
+        nav('/police');
+      } else {
+        nav(redirect === '/dashboard' ? '/dashboard' : redirect);
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid email or password.');
     } finally {
