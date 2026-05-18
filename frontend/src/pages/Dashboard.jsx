@@ -1,10 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MapView from '../components/MapView';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { api } from '../api/client';
+
+function ScoreBar({ score }) {
+  const color = score >= 90 ? '#16a34a' : score >= 40 ? '#d97706' : '#dc2626';
+  const label = score >= 90 ? 'High Match' : score >= 40 ? 'Possible Match' : 'Low Match';
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+        <span style={{ fontWeight: 700, color }}>{label}</span>
+        <span style={{ fontWeight: 800, color }}>{score}%</span>
+      </div>
+      <div style={{ height: 6, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${score}%`, background: color, borderRadius: 999, transition: 'width .4s' }} />
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -16,10 +32,13 @@ export default function Dashboard() {
   const [actionError, setActionError] = useState('');
   const [auditHistory, setAuditHistory] = useState({});
   const [expandedAudit, setExpandedAudit] = useState({});
+  const [sightingScan, setSightingScan] = useState({}); // { [sightingId]: { loading, results, error } }
   const [scanImage, setScanImage] = useState(null);
+  const [scanPreview, setScanPreview] = useState(null);
   const [scanResults, setScanResults] = useState(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState('');
+  const scanFileRef = useRef(null);
   const [pendingEdits, setPendingEdits] = useState({});
   const [savingId, setSavingId] = useState(null);
   const [editingIds, setEditingIds] = useState({});
@@ -148,6 +167,23 @@ export default function Dashboard() {
       } catch {
         setAuditHistory(prev => ({ ...prev, [id]: [] }));
       }
+    }
+  }
+
+  async function scanSighting(sightingId, imageUrl) {
+    if (!imageUrl) return;
+    setSightingScan(prev => ({ ...prev, [sightingId]: { loading: true, results: null, error: '' } }));
+    try {
+      // Fetch the sighting image and convert to a File for the scan API
+      const imgRes = await fetch(imageUrl);
+      const blob = await imgRes.blob();
+      const file = new File([blob], 'sighting.jpg', { type: blob.type || 'image/jpeg' });
+      const fd = new FormData();
+      fd.append('image', file);
+      const r = await api.post('/admin/scan-face', fd);
+      setSightingScan(prev => ({ ...prev, [sightingId]: { loading: false, results: r.data?.matches || [], error: '' } }));
+    } catch (err) {
+      setSightingScan(prev => ({ ...prev, [sightingId]: { loading: false, results: [], error: err.response?.data?.message || 'Scan failed' } }));
     }
   }
 
@@ -751,6 +787,17 @@ export default function Dashboard() {
                           >
                             Audit
                           </button>
+                          {/* Scan button — runs face detection on sighting photo */}
+                          {s.image_url && (
+                            <button
+                              className="db-mini-btn"
+                              style={{ background: '#f0fdf4', color: '#15803d' }}
+                              disabled={sightingScan[s.id]?.loading}
+                              onClick={() => scanSighting(s.id, s.image_url)}
+                            >
+                              {sightingScan[s.id]?.loading ? 'Scanning...' : 'Scan'}
+                            </button>
+                          )}
                         </div>
                       </div>
                       {expandedAudit[s.id] && (
@@ -776,6 +823,64 @@ export default function Dashboard() {
                           )}
                         </div>
                       )}
+
+                      {/* ── Inline face scan results ── */}
+                      {sightingScan[s.id] && !sightingScan[s.id].loading && (
+                        <div className="sighting-scan-panel">
+                          <div className="sighting-scan-header">
+                            <span>AI Face Match Results</span>
+                            <button
+                              onClick={() => setSightingScan(prev => { const n = {...prev}; delete n[s.id]; return n; })}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16, padding: '0 4px' }}
+                            >×</button>
+                          </div>
+
+                          {sightingScan[s.id].error && (
+                            <p style={{ color: 'var(--red)', fontSize: 13, margin: '8px 0 0' }}>{sightingScan[s.id].error}</p>
+                          )}
+
+                          {sightingScan[s.id].results?.length === 0 && !sightingScan[s.id].error && (
+                            <p className="muted" style={{ fontSize: 13, margin: '8px 0 0' }}>No matching faces found in the database.</p>
+                          )}
+
+                          {sightingScan[s.id].results?.length > 0 && (
+                            <div className="sighting-scan-results">
+                              {sightingScan[s.id].results.map((r, i) => {
+                                const color = r.score >= 90 ? '#15803d' : r.score >= 40 ? '#d97706' : '#dc2626';
+                                const label = r.score >= 90 ? 'High Match' : r.score >= 40 ? 'Possible' : 'Low';
+                                return (
+                                  <div key={r.case_id} className="sighting-scan-match">
+                                    <img src={r.image_url} alt={r.name} className="sighting-scan-img" />
+                                    <div className="sighting-scan-info">
+                                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>{r.name}</div>
+                                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                        {r.age && `Age ${r.age}`}{r.gender && ` · ${r.gender}`}
+                                      </div>
+                                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{r.last_seen_location}</div>
+                                      {/* Score bar */}
+                                      <div style={{ marginTop: 6 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                                          <span style={{ fontWeight: 700, color }}>{label}</span>
+                                          <span style={{ fontWeight: 800, color }}>{r.score}%</span>
+                                        </div>
+                                        <div style={{ height: 5, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+                                          <div style={{ height: '100%', width: `${r.score}%`, background: color, borderRadius: 999 }} />
+                                        </div>
+                                      </div>
+                                      <Link
+                                        to={`/cases/${r.case_id}`}
+                                        style={{ display: 'inline-block', marginTop: 8, fontSize: 12, fontWeight: 700, color: 'var(--green)', textDecoration: 'none' }}
+                                      >
+                                        View Case →
+                                      </Link>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -785,53 +890,128 @@ export default function Dashboard() {
 
           {activeTab === 'scan' && user.role === 'admin' && (
             <>
-              <h2>{t('dash.scan')}</h2>
-              <p className="muted" style={{ marginTop: -6, marginBottom: 18 }}>{t('dash.scan_sub')}</p>
-              <section className="panel" style={{ marginBottom: 20 }}>
-                <form className="form-grid" onSubmit={handleFaceScan}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>{t('dash.scan_upload')}</label>
-                    <input type="file" accept="image/*" onChange={e => setScanImage(e.target.files?.[0] || null)} />
-                  </div>
-                  {scanError && <div className="rc-error" style={{ marginTop: 0 }}>{scanError}</div>}
-                  <button type="submit" className="btn" disabled={scanLoading} style={{ width: 'fit-content' }}>
-                    {scanLoading ? t('dash.scan_scanning') : t('dash.scan_submit')}
-                  </button>
-                </form>
-              </section>
-              {scanResults !== null && (
-                <section className="panel">
-                  <div className="row between" style={{ marginBottom: 12, alignItems: 'center' }}>
-                    <h3 style={{ margin: 0 }}>{t('dash.scan_results')}</h3>
-                    <span className="muted" style={{ fontSize: 13 }}>{scanResults.length} matches</span>
-                  </div>
-                  {scanResults.length === 0 ? (
-                    <p className="muted" style={{ margin: 0 }}>{t('dash.scan_no_results')}</p>
-                  ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
-                      {scanResults.map(result => (
-                        <div key={result.case_id} className="case-card">
-                          <img src={result.image_url} alt={result.name} />
-                          <div className="case-body">
-                            <div className="row between" style={{ marginBottom: 8 }}>
-                              <h3 style={{ margin: 0 }}>{result.name}</h3>
-                              <span className={`badge ${result.status}`}>{result.score}%</span>
-                            </div>
-                            <p style={{ margin: '0 0 6px' }}><b>Age:</b> {result.age || '--'}</p>
-                            <p style={{ margin: '0 0 6px' }}><b>Gender:</b> {result.gender || '--'}</p>
-                            <p style={{ margin: 0 }}><b>Last seen:</b> {result.last_seen_location || '--'}</p>
-                            <div style={{ marginTop: 14 }}>
-                              <Link className="btn outline" to={`/cases/${result.case_id}`} style={{ display: 'block', textAlign: 'center' }}>
-                                View Case
-                              </Link>
-                            </div>
-                          </div>
+              <div className="db-header">
+                <div>
+                  <h1 className="db-title">{t('dash.scan')}</h1>
+                  <p className="db-subtitle">{t('dash.scan_sub')}</p>
+                </div>
+              </div>
+
+              <div className="scan-layout">
+                {/* Upload panel */}
+                <div className="scan-upload-panel">
+                  <form onSubmit={handleFaceScan}>
+                    <div className="scan-dropzone" onClick={() => scanFileRef.current?.click()}>
+                      {scanPreview ? (
+                        <div className="scan-preview-wrap">
+                          <img src={scanPreview} alt="Scan preview" className="scan-preview-img" />
+                          <div className="scan-preview-name">{scanImage?.name}</div>
                         </div>
-                      ))}
+                      ) : (
+                        <div className="scan-drop-inner">
+                          <div className="scan-drop-icon">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 9V5a2 2 0 012-2h4"/><path d="M15 3h4a2 2 0 012 2v4"/>
+                              <path d="M21 15v4a2 2 0 01-2 2h-4"/><path d="M9 21H5a2 2 0 01-2-2v-4"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                          </div>
+                          <p className="scan-drop-text">Click to upload a face photo</p>
+                          <p className="scan-drop-hint">JPG, PNG, WEBP — clear frontal face works best</p>
+                        </div>
+                      )}
+                    </div>
+                    <input ref={scanFileRef} type="file" accept="image/*"
+                      onChange={e => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        setScanImage(f);
+                        setScanPreview(URL.createObjectURL(f));
+                        setScanResults(null); setScanError('');
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    {scanError && <div className="rc-error" style={{ marginTop: 12 }}>{scanError}</div>}
+                    <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                      <button type="submit" className="rc-btn-submit" disabled={scanLoading || !scanImage} style={{ flex: 1 }}>
+                        {scanLoading ? <><span className="auth-spinner" /> Scanning database...</> : 'Scan & Match'}
+                      </button>
+                      {(scanImage || scanResults) && (
+                        <button type="button" onClick={() => { setScanImage(null); setScanPreview(null); setScanResults(null); setScanError(''); if (scanFileRef.current) scanFileRef.current.value = ''; }}
+                          style={{ background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 12, padding: '0 18px', fontWeight: 600, cursor: 'pointer' }}>
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                  <div className="scan-info-box">
+                    <p><strong>How it works:</strong></p>
+                    <ul>
+                      <li>Upload a clear photo of a person's face</li>
+                      <li>AI compares it against all missing persons in the database</li>
+                      <li>Results are ranked by similarity score</li>
+                      <li>90%+ score = high confidence match</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Results panel */}
+                <div className="scan-results-panel">
+                  {scanResults === null && !scanLoading && (
+                    <div className="scan-results-empty">
+                      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 9V5a2 2 0 012-2h4"/><path d="M15 3h4a2 2 0 012 2v4"/>
+                        <path d="M21 15v4a2 2 0 01-2 2h-4"/><path d="M9 21H5a2 2 0 01-2-2v-4"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                      <p>Upload a photo and click Scan to find matches</p>
                     </div>
                   )}
-                </section>
-              )}
+                  {scanLoading && (
+                    <div className="scan-results-empty">
+                      <div className="scan-loading-ring" />
+                      <p>Analyzing face and searching database...</p>
+                    </div>
+                  )}
+                  {scanResults !== null && !scanLoading && (
+                    <>
+                      <div className="scan-results-header">
+                        <h3>{scanResults.length === 0 ? 'No matches found' : `${scanResults.length} match${scanResults.length !== 1 ? 'es' : ''} found`}</h3>
+                        <span className="muted" style={{ fontSize: 13 }}>Sorted by confidence</span>
+                      </div>
+                      {scanResults.length === 0 ? (
+                        <div className="scan-results-empty" style={{ marginTop: 24 }}>
+                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                          <p>No matching faces found.<br /><span className="muted" style={{ fontSize: 13 }}>Try a clearer, frontal face photo.</span></p>
+                        </div>
+                      ) : (
+                        <div className="scan-results-grid">
+                          {scanResults.map((r, i) => (
+                            <div key={r.case_id} className={`scan-result-card ${r.score >= 90 ? 'scan-result-high' : r.score >= 40 ? 'scan-result-mid' : 'scan-result-low'}`}>
+                              <div className="scan-result-rank">#{i + 1}</div>
+                              <img src={r.image_url} alt={r.name} className="scan-result-img" />
+                              <div className="scan-result-body">
+                                <div className="scan-result-name">{r.name}</div>
+                                <div className="scan-result-meta">
+                                  {r.age && <span>Age {r.age}</span>}
+                                  {r.gender && <span>{r.gender}</span>}
+                                  <span className={`badge ${r.status}`}>{r.status}</span>
+                                </div>
+                                <div className="scan-result-location">
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                  {r.last_seen_location}
+                                </div>
+                                <ScoreBar score={r.score} />
+                                <Link to={`/cases/${r.case_id}`} className="scan-result-btn">View Case →</Link>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </>
           )}
 

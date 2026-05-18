@@ -7,7 +7,7 @@ export function errorHandler(err, req, res, next) {
   if (err instanceof ZodError) {
     return res.status(400).json({
       message: 'Validation error',
-      errors: err.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+      errors: (err.errors ?? err.issues ?? []).map(e => ({ field: e.path.join('.'), message: e.message }))
     });
   }
   // Multer file size error

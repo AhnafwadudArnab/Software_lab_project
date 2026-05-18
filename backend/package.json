@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "nodemon src/server.js",
+    "dev": "concurrently --names \"API,FACE\" --prefix-colors \"green,cyan\" \"nodemon --exec \\\"node --dns-result-order=ipv4first\\\" src/server.js\" \"python ../insightface-server/app.py\"",
     "start": "node --dns-result-order=ipv4first src/server.js",
     "db:init": "psql \"$DATABASE_URL\" -f schema.sql",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
@@ -22,8 +22,11 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "fast-check": "^4.7.0",
+    "form-data": "^4.0.5",
     "jest": "^30.3.0",
+    "node-fetch": "^3.3.2",
     "nodemon": "3.1.14",
     "supertest": "^7.2.2"
   }
