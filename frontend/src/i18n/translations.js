@@ -363,7 +363,7 @@ export const translations = {
     'nav.login_to_submit': 'রিপোর্ট করতে লগইন করুন →',
     // Home
     'home.hero_badge': 'বাংলাদেশ নিখোঁজ ব্যক্তি সহায়তা সিস্টেম',
-    'home.hero_title': 'প্রতিটি মুহূর্ত গুরুত্বপূর্ণ—',
+    'home.hero_title': 'প্রতিটি মুহূর্ত গুরুত্বপূর্ণ !',
     'home.hero_accent': 'চলুন তাদের পরিবারে ফিরিয়ে দিই।',
     'home.hero_sub': 'নিখোঁজ ব্যক্তির তথ্য দিন, তথ্য শেয়ার করুন এবং দ্রুত সাহায্য পান।',
     'home.search_placeholder': 'নাম, এলাকা বা বয়স লিখুন...',
