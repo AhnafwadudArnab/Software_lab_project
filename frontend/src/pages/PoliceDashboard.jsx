@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import PoliceCaseCard from '../components/PoliceCaseCard';
+import CaseSightingHistoryCard from '../components/CaseSightingHistoryCard';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
@@ -78,12 +79,6 @@ export default function PoliceDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
 
-  // Sightings state
-  const [sightingsError, setSightingsError] = useState('');
-  const [matchResults, setMatchResults] = useState(null);
-  const [matchLoading, setMatchLoading] = useState(false);
-  const [matchCaseId, setMatchCaseId] = useState('');
-
   // Police update notes state
   const [updatesCaseId, setUpdatesCaseId] = useState('');
   const [updates, setUpdates] = useState([]);
@@ -121,14 +116,6 @@ export default function PoliceDashboard() {
     if (activeTab === 'notifications') loadNotifications();
   }, [activeTab, loadNotifications]);
 
-  // Load sightings cases list when sightings tab opens (reuses cases state)
-  useEffect(() => {
-    if (activeTab !== 'sightings') return;
-    if (cases.length === 0) {
-      api.get('/cases').then(r => setCases(r.data)).catch(() => {});
-    }
-  }, [activeTab]);
-
   async function handleStatusUpdate(id, status) {
     setActionError('');
     try {
@@ -137,19 +124,6 @@ export default function PoliceDashboard() {
     } catch (err) {
       setActionError(err.response?.data?.message || 'Failed to update status');
     }
-  }
-
-  async function handleMatchSightings(caseId) {
-    setMatchCaseId(caseId);
-    setMatchLoading(true);
-    setMatchResults(null);
-    try {
-      const r = await api.get(`/sightings/match/${caseId}`);
-      setMatchResults(r.data);
-    } catch (err) {
-      setSightingsError(err.response?.data?.message || 'Failed to load sightings');
-    }
-    setMatchLoading(false);
   }
 
   async function markNotifRead(id) {
@@ -326,86 +300,15 @@ export default function PoliceDashboard() {
               <div className="db-header">
                 <div>
                   <h1 className="db-title">Sightings</h1>
-                  <p className="db-subtitle">Match witness sightings to a missing person case</p>
+                  <p className="db-subtitle">Each case keeps its own sighting history by case ID</p>
                 </div>
               </div>
 
-              <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', marginBottom: 20 }}>
-                <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 14 }}>Select a case to view matched sightings:</p>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <select
-                    value={matchCaseId}
-                    onChange={e => setMatchCaseId(e.target.value)}
-                    style={{ flex: 1, minWidth: 220, padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--border)', fontSize: 13, background: 'white' }}
-                  >
-                    <option value="">-- Choose a case --</option>
-                    {cases.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.status}) — {c.id}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => matchCaseId && handleMatchSightings(matchCaseId)}
-                    disabled={!matchCaseId || matchLoading}
-                    style={{ padding: '10px 22px', borderRadius: 10, background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 700, fontSize: 13, cursor: matchCaseId ? 'pointer' : 'not-allowed', opacity: matchCaseId ? 1 : 0.5 }}
-                  >
-                    {matchLoading ? 'Loading...' : 'Load Sightings'}
-                  </button>
-                </div>
+              <div className="dc-card-grid">
+                {cases.map(c => (
+                  <CaseSightingHistoryCard key={c.id} item={c} />
+                ))}
               </div>
-
-              {sightingsError && (
-                <div style={{ color: 'var(--red)', background: 'var(--red-light)', border: '1px solid var(--red)', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 14 }}>{sightingsError}</div>
-              )}
-
-              {matchResults && (
-                <div className="db-section">
-                  <div className="db-section-header" style={{ marginBottom: 16 }}>
-                    <h2 className="db-section-title" style={{ margin: 0 }}>
-                      Sightings for: {matchResults.case?.name}
-                    </h2>
-                    <span className="db-count-badge">{matchResults.matches?.length || 0} sightings</span>
-                  </div>
-
-                  {matchResults.matches?.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
-                      <p>No sightings reported for this case yet.</p>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {matchResults.matches.map(s => (
-                        <div key={s.id} style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span className={`badge ${s.status}`}>{s.status}</span>
-                              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(s.created_at).toLocaleDateString()}</span>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: s.confidence_level === 'sure' ? '#16a34a' : s.confidence_level === 'maybe' ? '#d97706' : '#6b7280' }}>
-                                {s.confidence_level === 'sure' ? '✓ Sure' : s.confidence_level === 'maybe' ? '~ Maybe' : '? Not sure'}
-                              </span>
-                            </div>
-                            {s.ai_match_score !== undefined && (
-                              <span style={{ fontSize: 12, fontWeight: 700, background: s.ai_match_score >= 60 ? '#d1fae5' : '#f3f4f6', color: s.ai_match_score >= 60 ? '#065f46' : '#374151', padding: '3px 10px', borderRadius: 999 }}>
-                                AI Match: {s.ai_match_score}%
-                              </span>
-                            )}
-                          </div>
-                          <p style={{ margin: '0 0 6px', fontSize: 14 }}>{s.description}</p>
-                          {s.location_text && (
-                            <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>
-                              📍 {s.location_text}
-                            </p>
-                          )}
-                          {s.image_url && (
-                            <img src={s.image_url} alt="Sighting" style={{ marginTop: 10, height: 100, borderRadius: 8, objectFit: 'cover' }} />
-                          )}
-                          {s.reporter_name && (
-                            <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--muted)' }}>Reported by: {s.reporter_name}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </>
           )}
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MapView from '../components/MapView';
+import CaseSightingHistoryCard from '../components/CaseSightingHistoryCard';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { api } from '../api/client';
@@ -144,17 +145,46 @@ export default function Dashboard() {
     }
   }
 
-  async function toggleHistory(caseId) {
-    const isExpanding = !expandedAudit[caseId];
-    setExpandedAudit(prev => ({ ...prev, [caseId]: isExpanding }));
-    if (isExpanding && !auditHistory[caseId]) {
-      try {
-        const r = await api.get(`/cases/${caseId}`);
-        setAuditHistory(prev => ({ ...prev, [caseId]: r.data.sightings || [] }));
-      } catch {
-        setAuditHistory(prev => ({ ...prev, [caseId]: [] }));
-      }
+  async function handleFaceScan(e) {
+    e.preventDefault();
+    if (!scanImage) { setScanError('Please upload a photo to scan.'); return; }
+    setScanError(''); setScanLoading(true); setScanResults(null);
+    try {
+      const fd = new FormData();
+      fd.append('image', scanImage);
+      const r = await api.post('/admin/scan-face', fd);
+      setScanResults(r.data?.matches || []);
+    } catch (err) {
+      setScanError(err.response?.data?.message || 'Failed to scan photo.');
+      setScanResults([]);
     }
+    setScanLoading(false);
+  }
+
+  // Req 4.3 / 4.4 / 4.5: submit found-person photo for a case
+  async function submitFoundPhoto(caseId) {
+    const file = foundUploadFile[caseId];
+    if (!file) {
+      setFoundUploadError(prev => ({ ...prev, [caseId]: 'Please select a photo before submitting' }));
+      return;
+    }
+    setFoundUploadError(prev => ({ ...prev, [caseId]: '' }));
+    setFoundUploading(prev => ({ ...prev, [caseId]: true }));
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      await api.post(`/cases/${caseId}/found-photo`, fd);
+      // Update local state: mark case as found, close upload form
+      setCases(prev => prev.map(c => c.id === caseId ? { ...c, status: 'found' } : c));
+      setFoundUploadOpen(prev => ({ ...prev, [caseId]: false }));
+      setFoundUploadFile(prev => { const n = { ...prev }; delete n[caseId]; return n; });
+    } catch (err) {
+      setFoundUploadError(prev => ({
+        ...prev,
+        [caseId]: err.response?.data?.message || 'Failed to upload photo.',
+      }));
+    }
+    setFoundUploading(prev => ({ ...prev, [caseId]: false }));
   }
 
   async function toggleSightingAudit(id) {
@@ -166,6 +196,19 @@ export default function Dashboard() {
         setAuditHistory(prev => ({ ...prev, [id]: r.data }));
       } catch {
         setAuditHistory(prev => ({ ...prev, [id]: [] }));
+      }
+    }
+  }
+
+  async function toggleHistory(caseId) {
+    const isExpanding = !expandedAudit[caseId];
+    setExpandedAudit(prev => ({ ...prev, [caseId]: isExpanding }));
+    if (isExpanding && !auditHistory[caseId]) {
+      try {
+        const r = await api.get(`/cases/${caseId}`);
+        setAuditHistory(prev => ({ ...prev, [caseId]: r.data.sightings || [] }));
+      } catch {
+        setAuditHistory(prev => ({ ...prev, [caseId]: [] }));
       }
     }
   }
@@ -251,54 +294,11 @@ export default function Dashboard() {
       setPendingEdits(prev => { const n = { ...prev }; delete n[c.id]; return n; });
       setEditingIds(prev => { const n = { ...prev }; delete n[c.id]; return n; });
     } catch (err) {
-      setActionError(err.response?.data?.message || 'Failed to save changes.');
+      setActionError(err.response?.data?.message || 'Failed to save case changes.');
     }
     setSavingId(null);
   }
 
-  async function handleFaceScan(e) {
-    e.preventDefault();
-    if (!scanImage) { setScanError('Please upload a photo to scan.'); return; }
-    setScanError(''); setScanLoading(true); setScanResults(null);
-    try {
-      const fd = new FormData();
-      fd.append('image', scanImage);
-      const r = await api.post('/admin/scan-face', fd);
-      setScanResults(r.data?.matches || []);
-    } catch (err) {
-      setScanError(err.response?.data?.message || 'Failed to scan photo.');
-      setScanResults([]);
-    }
-    setScanLoading(false);
-  }
-
-  // Req 4.3 / 4.4 / 4.5: submit found-person photo for a case
-  async function submitFoundPhoto(caseId) {
-    const file = foundUploadFile[caseId];
-    if (!file) {
-      setFoundUploadError(prev => ({ ...prev, [caseId]: 'Please select a photo before submitting' }));
-      return;
-    }
-    setFoundUploadError(prev => ({ ...prev, [caseId]: '' }));
-    setFoundUploading(prev => ({ ...prev, [caseId]: true }));
-    try {
-      const fd = new FormData();
-      fd.append('image', file);
-      await api.post(`/cases/${caseId}/found-photo`, fd);
-      // Update local state: mark case as found, close upload form
-      setCases(prev => prev.map(c => c.id === caseId ? { ...c, status: 'found' } : c));
-      setFoundUploadOpen(prev => ({ ...prev, [caseId]: false }));
-      setFoundUploadFile(prev => { const n = { ...prev }; delete n[caseId]; return n; });
-    } catch (err) {
-      setFoundUploadError(prev => ({
-        ...prev,
-        [caseId]: err.response?.data?.message || 'Failed to upload photo.',
-      }));
-    }
-    setFoundUploading(prev => ({ ...prev, [caseId]: false }));
-  }
-
-  // Req 2.3: dismiss a notification banner
   async function dismissNotification(notifId) {
     try {
       await api.patch(`/notifications/${notifId}/read`);
@@ -380,7 +380,6 @@ export default function Dashboard() {
             <div className="rc-error" style={{ marginBottom: 16 }}>{actionError}</div>
           )}
 
-          {/* Req 2.3: notification banner for unread found_person_photo notifications */}
           {notifications.filter(n => !n.read && n.type === 'found_person_photo').map(n => (
             <div
               key={n.id}
@@ -768,18 +767,6 @@ export default function Dashboard() {
                           </div>
                         </div>
                         <div className="dc-card-actions">
-                          {s.status === 'pending' ? (
-                            <>
-                              <button className="db-mini-btn verify" onClick={() => approveSighting(s.id)}>Approve</button>
-                              <button className="db-mini-btn reject" onClick={() => rejectSighting(s.id)}>Reject</button>
-                            </>
-                          ) : (
-                            <select value={s.status} onChange={e => updateSighting(s.id, e.target.value)} className="db-status-select">
-                              {['pending', 'verified', 'rejected'].map(st => (
-                                <option key={st} value={st}>{st}</option>
-                              ))}
-                            </select>
-                          )}
                           <button
                             className="db-mini-btn"
                             style={{ background: '#f0f4ff', color: '#3b5bdb' }}
