@@ -170,30 +170,6 @@ export default function Register() {
               </div>
             </div>
 
-            <div className="auth-field">
-              <label>{t('register.role')}</label>
-              <div className="auth-role-grid">
-                {roles.map(r => (
-                  <label
-                    key={r.value}
-                    className={`auth-role-option ${form.role === r.value ? 'active' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="role"
-                      value={r.value}
-                      checked={form.role === r.value}
-                      onChange={set('role')}
-                    />
-                    <div>
-                      <b>{r.label}</b>
-                      <p>{r.desc}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
             <button type="submit" className="auth-submit-btn" disabled={loading}>
               {loading ? <span className="auth-spinner" /> : null}
               {loading ? t('register.creating') : t('register.submit')}

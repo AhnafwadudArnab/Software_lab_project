@@ -33,6 +33,7 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
 
+app.get('/', (req, res) => res.json({ message: 'Missing Diary API', endpoints: '/api/auth, /api/cases, /api/sightings, /api/admin, /api/notifications, /health' }));
 app.get('/health', (req, res) => res.json({ ok: true, app: 'Missing Diary API' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/cases', caseRoutes);
