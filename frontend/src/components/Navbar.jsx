@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import logoGif from '../assets/output-onlinegiftools.gif';
 import { getAll as getOfflineQueue } from '../utils/offlineQueue';
+import NotificationsBell from './NotificationsBell';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -48,6 +49,8 @@ export default function Navbar() {
           <img src={logoGif} alt="Missing Diary" className="brand-gif" />
         </div>
       </Link>
+
+      <NotificationsBell />
 
       <nav>
         {/* ── CENTER: public nav links (guardian/guest only) ── */}

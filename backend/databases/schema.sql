@@ -19,7 +19,7 @@ CREATE TABLE users (
   email         VARCHAR(160) UNIQUE NOT NULL,
   phone         VARCHAR(40),
   password_hash TEXT NOT NULL,
-  role          VARCHAR(20) NOT NULL CHECK (role IN ('admin','police')) DEFAULT 'admin',
+  role          VARCHAR(20) NOT NULL CHECK (role IN ('admin','police','guardian')) DEFAULT 'guardian',
   verified      BOOLEAN DEFAULT FALSE,
   created_at    TIMESTAMP DEFAULT NOW()
 );

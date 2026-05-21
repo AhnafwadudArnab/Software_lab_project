@@ -13,7 +13,7 @@ export const translations = {
     'nav.login_to_submit': 'Login to submit a report →',
     // Home
     'home.hero_badge': 'Bangladesh Missing Persons Alert System',
-    'home.hero_title': 'Every second counts.',
+    'home.hero_title': 'Every second counts !',
     'home.hero_accent': 'let\'s bring them home.',
     'home.hero_sub': 'Report missing persons instantly. Share information. Connect with authorities.',
     'home.search_placeholder': 'Search by name, location, age...',

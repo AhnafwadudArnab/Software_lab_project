@@ -8,9 +8,9 @@ const registerSchema = z.object({
   email: z.string().email().transform((value) => value.trim().toLowerCase()),
   phone: z.string().optional(),
   password: z.string().min(6),
-  // Public registration always creates 'admin' role (the only public-facing role in this system)
+  // Public registration should create a non-privileged 'guardian' role
   // Police accounts are created by admin via POST /api/admin/police
-  role: z.literal('admin').default('admin')
+  // Do not accept `role` from clients — server assigns guardian explicitly.
 });
 
 const loginSchema = z.object({
@@ -26,9 +26,11 @@ export async function register(req, res, next) {
     const exists = await query('SELECT id FROM users WHERE email=$1', [data.email]);
     if (exists.rows.length) return res.status(409).json({ message: 'Email already exists' });
     const hash = await bcrypt.hash(data.password, 10);
+    // Force role to guardian regardless of client input
+    const role = 'guardian';
     const result = await query(
       'INSERT INTO users (name,email,phone,password_hash,role,verified) VALUES ($1,$2,$3,$4,$5,true) RETURNING id,name,email,role,verified',
-      [data.name, data.email, data.phone || null, hash, data.role]
+      [data.name, data.email, data.phone || null, hash, role]
     );
     const user = result.rows[0];
     res.status(201).json({ user, token: sign(user) });

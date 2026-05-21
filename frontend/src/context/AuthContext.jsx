@@ -40,17 +40,38 @@ export function AuthProvider({ children }) {
   // AuthProvider sits outside BrowserRouter, so useNavigate is unavailable here;
   // window.location.href is used for the redirect instead.
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (isTokenExpired(token)) {
-      // Only redirect if there was actually a stale session to clear
-      const hadSession = token !== null || localStorage.getItem('user') !== null;
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      setUser(null);
-      if (hadSession && window.location.pathname !== '/login') {
-        window.location.href = '/login';
+    const init = async () => {
+      const token = localStorage.getItem('token');
+      if (!token || isTokenExpired(token)) {
+        const hadSession = token !== null || localStorage.getItem('user') !== null;
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+        if (hadSession && window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+        return;
       }
-    }
+      try {
+        const { data } = await api.get('/auth/me');
+        if (data && data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+          setUser(data.user);
+        } else {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+        }
+      } catch (e) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
+    };
+    init();
   }, []);
 
   // Fix #18: wrap functions in useCallback so useMemo dependency array is correct

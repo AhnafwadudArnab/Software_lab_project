@@ -5,7 +5,7 @@ import { useLang } from '../context/LangContext';
 import logoGif from '../assets/output-onlinegiftools.gif';
 
 export default function Register() {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', role: 'admin' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,11 +29,7 @@ export default function Register() {
     }
   }
 
-  // Public registration creates admin accounts
-  // Police accounts are created by admin via the dashboard
-  const roles = [
-    { value: 'admin', label: 'Admin / Guardian', desc: 'Report missing persons and manage cases' },
-  ];
+  // Public registration creates guardian accounts; police/admin are created by admins.
 
   return (
     <div className="auth-page">
