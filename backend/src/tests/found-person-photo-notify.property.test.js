@@ -463,6 +463,7 @@ describe('Feature: found-person-photo-notify, Property 6: notifications are retu
               message: fc.string({ minLength: 1, maxLength: 100 }),
               read: fc.boolean(),
               created_at: fc.date({ min: new Date('2020-01-01'), max: new Date('2030-01-01') })
+                .filter(d => Number.isFinite(d.getTime()))
                 .map(d => d.toISOString()),
             }),
             { minLength: 0, maxLength: 20 }
@@ -532,6 +533,7 @@ describe('Feature: found-person-photo-notify, Property 10: GET /api/cases/:id/fo
               image_url: fc.webUrl(),
               public_id: fc.string({ minLength: 1, maxLength: 50 }),
               created_at: fc.date({ min: new Date('2020-01-01'), max: new Date('2030-01-01') })
+                .filter(d => Number.isFinite(d.getTime()))
                 .map(d => d.toISOString()),
             }),
             { minLength: 0, maxLength: 20 }

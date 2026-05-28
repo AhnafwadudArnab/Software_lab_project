@@ -172,11 +172,23 @@ export async function updateCaseStatus(req, res, next) {
     const { status, notes } = schema.parse(req.body);
     const result = await query('UPDATE missing_persons SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *', [status, req.params.id]);
     if (!result.rows[0]) return res.status(404).json({ message: 'Case not found' });
+    const updatedCase = result.rows[0];
     await query(
       'INSERT INTO audit_logs (user_id,action,target_type,target_id,notes) VALUES ($1,$2,$3,$4,$5)',
       [req.user.id, 'Updated case status to ' + status, 'missing_person', req.params.id, notes || null]
     );
-    res.json(result.rows[0]);
+    if (status === 'found' && updatedCase.guardian_id) {
+      await query(
+        `INSERT INTO notifications (user_id, case_id, type, message)
+         VALUES ($1, $2, 'found_person_photo', $3)`,
+        [
+          updatedCase.guardian_id,
+          req.params.id,
+          `Police/Admin confirmed that ${updatedCase.name} has been found.`,
+        ]
+      );
+    }
+    res.json(updatedCase);
   } catch (e) { next(e); }
 }
 

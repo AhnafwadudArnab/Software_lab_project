@@ -5,6 +5,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 DROP TABLE IF EXISTS audit_logs, case_timeline, location_trail, police_updates,
+                     sighting_face_scans, found_person_photos, notifications,
                      sightings, person_images, person_videos, missing_persons, users CASCADE;
 
 DROP SEQUENCE IF EXISTS missing_report_seq;
@@ -94,10 +95,24 @@ CREATE TABLE sightings (
   description       TEXT,
   image_url         TEXT,
   confidence_level  VARCHAR(20) CHECK (confidence_level IN ('sure','maybe','not_sure')) DEFAULT 'maybe',
-  status            VARCHAR(20) CHECK (status IN ('pending','verified','rejected')) DEFAULT 'pending',
+  status            VARCHAR(20) CHECK (status IN ('pending','verified','rejected','flagged')) DEFAULT 'pending',
   ai_score          INT,
   ai_flags          TEXT,
+  sighted_at        TIMESTAMP DEFAULT NOW(),
   created_at        TIMESTAMP DEFAULT NOW()
+);
+
+-- ── Face Scan Results for Sighting Photos ───────────────────
+CREATE TABLE sighting_face_scans (
+  id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sighting_id         UUID NOT NULL REFERENCES sightings(id) ON DELETE CASCADE,
+  matched_person_id   TEXT REFERENCES missing_persons(id) ON DELETE SET NULL,
+  face_match_score    NUMERIC(5,2) CHECK (face_match_score >= 0 AND face_match_score <= 100),
+  scan_status         VARCHAR(30) NOT NULL CHECK (scan_status IN ('matched','no_match','low_confidence','error')),
+  scanned_image_url   TEXT,
+  scan_metadata       JSONB,
+  scanned_by          UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at          TIMESTAMP DEFAULT NOW()
 );
 
 -- ── Police Updates ────────────────────────────────────────────
@@ -147,7 +162,7 @@ CREATE TABLE notifications (
   id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   case_id    TEXT REFERENCES missing_persons(id) ON DELETE SET NULL,
-  type       VARCHAR(40) NOT NULL CHECK (type IN ('request_info', 'found_person_photo')),
+  type       VARCHAR(40) NOT NULL CHECK (type IN ('request_info', 'found_person_photo','new_sighting','face_match')),
   message    TEXT NOT NULL,
   read       BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -168,6 +183,10 @@ CREATE INDEX idx_mp_status          ON missing_persons(status);
 CREATE INDEX idx_mp_created         ON missing_persons(created_at DESC);
 CREATE INDEX idx_sightings_person   ON sightings(missing_person_id);
 CREATE INDEX idx_sightings_created  ON sightings(created_at DESC);
+CREATE INDEX idx_sightings_seen     ON sightings(missing_person_id, sighted_at ASC);
+CREATE INDEX idx_face_scans_sighting       ON sighting_face_scans(sighting_id);
+CREATE INDEX idx_face_scans_matched_person ON sighting_face_scans(matched_person_id);
+CREATE INDEX idx_face_scans_status         ON sighting_face_scans(scan_status);
 CREATE INDEX idx_audit_target       ON audit_logs(target_id);
 CREATE INDEX idx_location_trail_case     ON location_trail(case_id);
 CREATE INDEX idx_location_trail_recorded ON location_trail(recorded_at DESC);

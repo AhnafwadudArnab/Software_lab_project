@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import PoliceCaseCard from '../components/PoliceCaseCard';
 import CaseSightingHistoryCard from '../components/CaseSightingHistoryCard';
+import MovementMapDropdown from '../components/MovementMapDropdown';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 
@@ -116,6 +117,12 @@ export default function PoliceDashboard() {
     if (activeTab === 'notifications') loadNotifications();
   }, [activeTab, loadNotifications]);
 
+  useEffect(() => {
+    loadNotifications();
+    const id = setInterval(loadNotifications, 5000);
+    return () => clearInterval(id);
+  }, [loadNotifications]);
+
   async function handleStatusUpdate(id, status) {
     setActionError('');
     try {
@@ -224,6 +231,9 @@ export default function PoliceDashboard() {
             <button className={`db-nav-item ${activeTab === 'sightings' ? 'active' : ''}`} onClick={() => setActiveTab('sightings')}>
               <IconSighting /> Sightings
             </button>
+            <button className={`db-nav-item ${activeTab === 'map' ? 'active' : ''}`} onClick={() => setActiveTab('map')}>
+              <IconSearch /> Movement Map
+            </button>
             <button className={`db-nav-item ${activeTab === 'updates' ? 'active' : ''}`} onClick={() => setActiveTab('updates')}>
               <IconClipboard /> Case Updates
             </button>
@@ -309,6 +319,19 @@ export default function PoliceDashboard() {
                   <CaseSightingHistoryCard key={c.id} item={c} />
                 ))}
               </div>
+            </>
+          )}
+
+          {/* ── MOVEMENT MAP TAB ── */}
+          {activeTab === 'map' && (
+            <>
+              <div className="db-header">
+                <div>
+                  <h1 className="db-title">Movement Map</h1>
+                  <p className="db-subtitle">Select a missing person and review their verified sighting trail</p>
+                </div>
+              </div>
+              <MovementMapDropdown cases={cases} />
             </>
           )}
 

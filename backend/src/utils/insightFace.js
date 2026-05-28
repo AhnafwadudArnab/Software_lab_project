@@ -1,5 +1,8 @@
-const INSIGHTFACE_API_URL = process.env.INSIGHTFACE_API_URL;
-const INSIGHTFACE_TOKEN = process.env.INSIGHTFACE_TOKEN || process.env.VITE_INSIGHTFACE_TOKEN;
+const INSIGHTFACE_API_URL = process.env.INSIGHTFACE_API_URL || 'http://localhost:7000/compare';
+const INSIGHTFACE_TOKEN =
+  process.env.INSIGHTFACE_TOKEN ||
+  process.env.VITE_INSIGHTFACE_TOKEN ||
+  '1KioG8FWMS2R4sVGRR4uKDHHB3LnRzL76b';
 
 function toBase64(buffer) {
   return Buffer.from(buffer).toString('base64');

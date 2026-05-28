@@ -1,4 +1,4 @@
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMapEvents } from 'react-leaflet';
+import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
 const icon = new L.Icon({
@@ -12,7 +12,7 @@ function ClickPicker({ onPick }) {
   return null;
 }
 
-export default function MapView({ center = [23.8103, 90.4125], markers = [], onPick, height = 320, draggable = false, polyline = null }) {
+export default function MapView({ center = [23.8103, 90.4125], markers = [], onPick, height = 320, draggable = false, polyline = null, circles = [] }) {
   return (
     <div style={{ position: 'relative', height, width: '100%', borderRadius: 14, overflow: 'hidden', zIndex: 0 }}>
       <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%' }}>
@@ -34,6 +34,21 @@ export default function MapView({ center = [23.8103, 90.4125], markers = [], onP
         {polyline && polyline.length > 1 && (
           <Polyline positions={polyline} color="var(--green)" weight={3} opacity={0.8} />
         )}
+        {circles.map((c, i) => (
+          <Circle
+            key={`${c.lat}-${c.lng}-${c.radius}-${i}`}
+            center={[Number(c.lat), Number(c.lng)]}
+            radius={Number(c.radius)}
+            pathOptions={{
+              color: c.color || '#0284c7',
+              fillColor: c.fillColor || '#38bdf8',
+              fillOpacity: c.fillOpacity ?? 0.18,
+              weight: c.weight || 2,
+            }}
+          >
+            <Popup><b>{c.title}</b><br />{c.description}</Popup>
+          </Circle>
+        ))}
       </MapContainer>
     </div>
   );

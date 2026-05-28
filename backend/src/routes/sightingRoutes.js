@@ -9,6 +9,7 @@ import {
   getSightingAudit,
   getSightingHistory,
   saveFaceScanResult,
+  getMovementAnalysis,
 } from '../controllers/sightingController.js';
 import { requireAuth, requireRole, optionalAuth } from '../middleware/auth.js';
 import { upload } from '../utils/upload.js';
@@ -23,6 +24,9 @@ router.get('/match/:caseId', requireAuth, requireRole('admin', 'police'), matchS
 // Sighting history for a case — public (only verified sightings shown to anonymous)
 // Admin/police দেখবে সব, public দেখবে শুধু verified
 router.get('/history/:caseId', optionalAuth, getSightingHistory);
+
+// Movement pattern + probable next area from verified/matched sightings
+router.get('/movement/:caseId', optionalAuth, getMovementAnalysis);
 
 router.get('/', requireAuth, requireRole('admin'), listSightings);
 router.patch('/:id/status', requireAuth, requireRole('admin'), updateSightingStatus);

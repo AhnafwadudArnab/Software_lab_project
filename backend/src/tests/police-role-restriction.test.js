@@ -83,6 +83,9 @@ await jest.unstable_mockModule('../controllers/sightingController.js', () => ({
   approveSighting:      jest.fn((_req, res) => res.json({})),
   rejectSighting:       jest.fn((_req, res) => res.json({})),
   getSightingAudit:     jest.fn((_req, res) => res.json([])),
+  getSightingHistory:   jest.fn((_req, res) => res.json({ history: [] })),
+  saveFaceScanResult:   jest.fn((_req, res) => res.status(201).json({})),
+  getMovementAnalysis:  jest.fn((_req, res) => res.json({ trail: [], prediction: null })),
 }));
 
 // ── Dynamic imports AFTER mocks are set up ────────────────────────────────────

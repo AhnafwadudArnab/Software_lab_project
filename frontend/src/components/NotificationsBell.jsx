@@ -35,11 +35,17 @@ export default function NotificationsBell() {
       }
     }
     fetchNotes();
-    const id = setInterval(fetchNotes, 10000);
+    const id = setInterval(fetchNotes, 5000);
     return () => { mounted = false; clearInterval(id); };
   }, [user]);
 
   const unreadCount = notes.filter(n => !n.read).length;
+  const typeLabel = {
+    found_person_photo: 'Found confirmed',
+    new_sighting: 'New sighting',
+    face_match: 'Face match',
+    request_info: 'Info request',
+  };
 
   async function handleClickNote(n) {
     try {
@@ -92,10 +98,11 @@ export default function NotificationsBell() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ fontWeight: 700 }}>{n.case_name || n.type || 'Notification'}</div>
+                    <div style={{ fontWeight: 700 }}>{n.case_name || typeLabel[n.type] || 'Notification'}</div>
                     <div style={{ color: '#6b7280', fontSize: 12 }}>{new Date(n.created_at).toLocaleString()}</div>
                   </div>
                   <div style={{ color: '#374151', marginTop: 6 }}>{n.message}</div>
+                  <div style={{ color: '#6b7280', marginTop: 4, fontSize: 12 }}>{typeLabel[n.type] || n.type}</div>
                 </div>
               </li>
             ))}

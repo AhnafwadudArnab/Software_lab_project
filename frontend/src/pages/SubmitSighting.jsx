@@ -5,6 +5,12 @@ import MapView from '../components/MapView';
 import { useLang } from '../context/LangContext';
 import { api } from '../api/client';
 
+function currentLocalDateTimeInput() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 export default function SubmitSighting() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -17,6 +23,7 @@ export default function SubmitSighting() {
   const [form, setForm] = useState({
     missing_person_id: id || '',
     location_text: '',
+    sighted_at: currentLocalDateTimeInput(),
     description: '',
     confidence_level: 'maybe',
     reporter_name: '',
@@ -31,6 +38,20 @@ export default function SubmitSighting() {
     api.get('/cases')
       .then(r => setCases(r.data))
       .catch(() => setCasesError('Could not load cases list. Please refresh and try again.'));
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        handleMapPick({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
   }, []);
 
   async function handleMapPick(latlng) {
@@ -102,7 +123,7 @@ export default function SubmitSighting() {
           <p style={{ color: 'var(--muted)', marginBottom: 28 }}>{t('ss.success_sub')}</p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link className="btn" to="/cases">{t('ss.view_cases')}</Link>
-            <button className="btn outline" onClick={() => { setSubmitted(false); setForm({ missing_person_id: '', location_text: '', description: '', confidence_level: 'maybe', reporter_name: '', reporter_phone: '' }); setImage(null); setAnonymous(true); }}>
+            <button className="btn outline" onClick={() => { setSubmitted(false); setForm({ missing_person_id: '', location_text: '', sighted_at: currentLocalDateTimeInput(), description: '', confidence_level: 'maybe', reporter_name: '', reporter_phone: '' }); setImage(null); setAnonymous(true); }}>
               {t('ss.submit_another')}
             </button>
           </div>
@@ -192,6 +213,19 @@ export default function SubmitSighting() {
               </div>
             </div>
           )}
+
+          {/* Location */}
+          <div>
+            <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+              দেখা যাওয়ার তারিখ ও সময় <span style={{ color: 'var(--danger)' }}>*</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={form.sighted_at}
+              onChange={e => setForm({ ...form, sighted_at: e.target.value })}
+              required
+            />
+          </div>
 
           {/* Location */}
           <div>

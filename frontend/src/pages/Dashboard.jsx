@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import MapView from '../components/MapView';
 import CaseSightingHistoryCard from '../components/CaseSightingHistoryCard';
+import MovementMapDropdown from '../components/MovementMapDropdown';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { api } from '../api/client';
@@ -316,7 +316,6 @@ export default function Dashboard() {
     });
   }
 
-  const markers = cases.map(c => ({ lat: c.last_seen_lat, lng: c.last_seen_lng, title: c.name, description: c.status }));
   const totalCases = cases.length;
   const activeCases = cases.filter(c => ['active', 'verified'].includes(c.status)).length;
   const pendingCount = cases.filter(c => c.status === 'pending').length;
@@ -1005,7 +1004,7 @@ export default function Dashboard() {
           {activeTab === 'map' && (
             <>
               <h2>{t('dash.cases_map')}</h2>
-              <MapView markers={markers} height={520} />
+              <MovementMapDropdown cases={cases} />
             </>
           )}
         </main>

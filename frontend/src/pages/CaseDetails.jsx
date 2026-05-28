@@ -19,6 +19,7 @@ export default function CaseDetails() {
   const [showQR, setShowQR] = useState(false);
   const [loadingMatch, setLoadingMatch] = useState(false);
   const [locationTrail, setLocationTrail] = useState([]);
+  const [movementAnalysis, setMovementAnalysis] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   // Task 18.1: timeline entries state
   const [timelineEntries, setTimelineEntries] = useState([]);
@@ -55,6 +56,13 @@ export default function CaseDetails() {
       .catch(() => {
         // Silently ignore errors (e.g. unauthenticated)
       });
+  }, [id]);
+
+  // Movement pattern from last-seen point + verified/face-matched sightings
+  useEffect(() => {
+    api.get(`/sightings/movement/${id}`)
+      .then(r => setMovementAnalysis(r.data))
+      .catch(() => setMovementAnalysis(null));
   }, [id]);
 
   // Req 3.4: Fetch found-person photos when case is loaded and status is "found"
@@ -143,12 +151,43 @@ export default function CaseDetails() {
   // Tracking toggle is visible to admin/police only
   const isOwnerOrGuardian = user && (user.role === 'admin' || user.role === 'police');
 
+  const movementTrail = movementAnalysis?.trail || [];
+  const movementMarkers = movementTrail.length > 0
+    ? movementTrail.map((point, index) => ({
+      lat: point.lat,
+      lng: point.lng,
+      title: point.source === 'last_seen' ? 'Last seen' : `Seen ${index}`,
+      description: point.location_text || point.description || '',
+    }))
+    : [
+      { lat: item.last_seen_lat, lng: item.last_seen_lng, title: 'Last seen', description: item.last_seen_location },
+      // Verified sighting markers only visible to guardian/admin/police (sightings array is empty for others)
+      ...(item.sightings || []).filter(s => s.status === 'verified').map(s => ({
+        lat: s.lat, lng: s.lng, title: 'Verified sighting', description: s.description
+      })),
+    ];
+  const predictionMarker = movementAnalysis?.prediction
+    ? [{
+      lat: movementAnalysis.prediction.lat,
+      lng: movementAnalysis.prediction.lng,
+      title: movementAnalysis.prediction.mode === 'radius' ? 'Probability radius center' : 'Next probable area',
+      description: `${movementAnalysis.prediction.area} (${movementAnalysis.prediction.confidence}% confidence)`,
+    }]
+    : [];
+  const movementPolyline = movementTrail.map(point => [Number(point.lat), Number(point.lng)]);
+  const movementCircles = movementAnalysis?.prediction?.mode === 'radius'
+    ? [{
+      lat: movementAnalysis.prediction.lat,
+      lng: movementAnalysis.prediction.lng,
+      radius: movementAnalysis.prediction.radius_meters,
+      title: 'Probable search radius',
+      description: `${movementAnalysis.prediction.area} (${movementAnalysis.prediction.confidence}% confidence)`,
+    }]
+    : [];
+
   const markers = [
-    { lat: item.last_seen_lat, lng: item.last_seen_lng, title: 'Last seen', description: item.last_seen_location },
-    // Verified sighting markers only visible to guardian/admin/police (sightings array is empty for others)
-    ...(item.sightings || []).filter(s => s.status === 'verified').map(s => ({
-      lat: s.lat, lng: s.lng, title: 'Verified sighting', description: s.description
-    })),
+    ...movementMarkers,
+    ...predictionMarker,
     // Task 18.1: add timeline entry markers for entries that have coordinates
     ...timelineEntries.filter(e => e.lat != null && e.lng != null).map(e => ({
       lat: e.lat, lng: e.lng,
@@ -363,8 +402,42 @@ export default function CaseDetails() {
           </section>
         )}
 
-        <h2>Last Seen Location & Verified Sightings</h2>
-        <MapView center={mapCenter} markers={markers} polyline={locationTrail} />
+        <h2>Movement Pattern & Probable Area</h2>
+        {movementAnalysis && (
+          <section className="panel" style={{ padding: 18, marginBottom: 16 }}>
+            <div className="row between" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 280px' }}>
+                <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 800, textTransform: 'uppercase', marginBottom: 6 }}>
+                  Last seen route
+                </div>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--text)', lineHeight: 1.5 }}>
+                  {movementAnalysis.movement_pattern || 'Not enough verified sightings yet'}
+                </p>
+              </div>
+              {movementAnalysis.prediction && (
+                <div style={{ flex: '0 1 300px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>
+                    AI/ML probable next area
+                  </div>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--text)' }}>
+                    {movementAnalysis.prediction.area}
+                  </div>
+                  <div style={{ fontSize: 13, color: '#0369a1', marginTop: 4 }}>
+                    Confidence {movementAnalysis.prediction.confidence}%
+                    {movementAnalysis.prediction.mode === 'radius' && movementAnalysis.prediction.radius_km ? ` • Radius ${movementAnalysis.prediction.radius_km} km` : ''}
+                    {movementAnalysis.prediction.mode === 'route' && movementAnalysis.prediction.distance_km ? ` • Route ${movementAnalysis.prediction.distance_km} km` : ''}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+        <MapView
+          center={mapCenter}
+          markers={markers}
+          polyline={movementAnalysis?.prediction?.mode === 'radius' ? null : movementPolyline.length > 1 ? movementPolyline : locationTrail}
+          circles={movementCircles}
+        />
 
         <h2>{t('case.timeline_title')}</h2>
         {/* Task 18.1: Display case timeline entries from the API */}

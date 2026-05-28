@@ -144,6 +144,11 @@ export default function CaseSightingHistoryCard({ item }) {
                       <ConfidenceBadge level={entry.confidence_level} />
                     </div>
                     <div className="dc-history-location">Location: {entry.location_text || 'Not specified'}</div>
+                    {entry.lat != null && entry.lng != null && (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                        GPS: {Number(entry.lat).toFixed(5)}, {Number(entry.lng).toFixed(5)}
+                      </div>
+                    )}
                     <div className="dc-history-desc">{entry.description}</div>
                     <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                       Reporter: {entry.reporter_name || 'Anonymous'}
