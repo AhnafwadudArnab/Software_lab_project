@@ -25,27 +25,23 @@ export default function NotificationsBell() {
       if (!user) return setNotes([]);
       setLoading(true);
       try {
-        const { data } = await api.get('/notifications');
+        // Admins and police should be able to see broader notifications
+        const scope = (user.role === 'admin' || user.role === 'police') ? '?all=true' : '';
+        const { data } = await api.get(`/notifications${scope}`);
         if (!mounted) return;
         setNotes(data);
       } catch {
-        // ignore — user may be unauthenticated
+        // ignore — user may be unauthenticated or network error
       } finally {
         setLoading(false);
       }
     }
     fetchNotes();
-    const id = setInterval(fetchNotes, 5000);
+    const id = setInterval(fetchNotes, 10000);
     return () => { mounted = false; clearInterval(id); };
   }, [user]);
 
   const unreadCount = notes.filter(n => !n.read).length;
-  const typeLabel = {
-    found_person_photo: 'Found confirmed',
-    new_sighting: 'New sighting',
-    face_match: 'Face match',
-    request_info: 'Info request',
-  };
 
   async function handleClickNote(n) {
     try {
@@ -54,7 +50,9 @@ export default function NotificationsBell() {
       // ignore
     }
     setNotes(s => s.map(x => (x.id === n.id ? { ...x, read: true } : x)));
+    // Navigate to case if present, otherwise fall back to general cases list
     if (n.case_id) nav(`/cases/${n.case_id}`);
+    else nav('/cases');
     setOpen(false);
   }
 
@@ -79,8 +77,8 @@ export default function NotificationsBell() {
       </button>
 
       {open && (
-        <div className="nav-notifications-dropdown" style={{ position: 'absolute', right: 0, top: 40, width: 320, maxHeight: 360, overflow: 'auto', background: '#fff', boxShadow: '0 6px 18px rgba(0,0,0,0.12)', borderRadius: 8, zIndex: 60 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid #eee' }}>
+        <div className="nav-notifications-dropdown" style={{ position: 'absolute', right: 0, top: 40, zIndex: 60 }}>
+          <div className="header">
             <strong>Notifications</strong>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn tiny" onClick={markAllRead} disabled={notes.length === 0}>Mark all read</button>
@@ -90,23 +88,25 @@ export default function NotificationsBell() {
           {!loading && notes.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center', color: '#666' }}>No notifications</div>
           )}
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-            {notes.map(n => (
-              <li key={n.id} style={{ display: 'flex', gap: 8, padding: '10px 12px', borderBottom: '1px solid #f4f4f6', background: n.read ? '#fff' : '#f8fafc', cursor: 'pointer' }} onClick={() => handleClickNote(n)}>
-                <div style={{ flex: '0 0 44px' }}>
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#4b5563" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12v1a3 3 0 01-3 3H6a3 3 0 01-3-3v-1"/></svg>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ fontWeight: 700 }}>{n.case_name || typeLabel[n.type] || 'Notification'}</div>
-                    <div style={{ color: '#6b7280', fontSize: 12 }}>{new Date(n.created_at).toLocaleString()}</div>
+          <div className="list">
+            <ul>
+              {notes.map(n => (
+                <li key={n.id} className={n.read ? '' : 'unread'} onClick={() => handleClickNote(n)}>
+                  <div className="avatar">
+                    {/* Use case initials if available */}
+                    {n.case_name ? n.case_name.split(' ').map(s => s[0]).slice(0,2).join('') : '🔔'}
                   </div>
-                  <div style={{ color: '#374151', marginTop: 6 }}>{n.message}</div>
-                  <div style={{ color: '#6b7280', marginTop: 4, fontSize: 12 }}>{typeLabel[n.type] || n.type}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <div className="meta">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <div className="title">{n.case_name || (n.type || 'Notification')}</div>
+                      <div className="time">{new Date(n.created_at).toLocaleString()}</div>
+                    </div>
+                    <div className="msg">{n.message}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
     </div>

@@ -166,11 +166,11 @@ export default function CaseDetails() {
         lat: s.lat, lng: s.lng, title: 'Verified sighting', description: s.description
       })),
     ];
-  const predictionMarker = movementAnalysis?.prediction
+  const predictionMarker = movementAnalysis?.prediction && movementAnalysis.prediction.mode !== 'radius'
     ? [{
       lat: movementAnalysis.prediction.lat,
       lng: movementAnalysis.prediction.lng,
-      title: movementAnalysis.prediction.mode === 'radius' ? 'Probability radius center' : 'Next probable area',
+      title: 'Next probable area',
       description: `${movementAnalysis.prediction.area} (${movementAnalysis.prediction.confidence}% confidence)`,
     }]
     : [];
@@ -417,7 +417,7 @@ export default function CaseDetails() {
               {movementAnalysis.prediction && (
                 <div style={{ flex: '0 1 300px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '12px 14px' }}>
                   <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>
-                    AI/ML probable next area
+                    {movementAnalysis.prediction.mode === 'radius' ? 'Probable search radius' : 'AI/ML probable next area'}
                   </div>
                   <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--text)' }}>
                     {movementAnalysis.prediction.area}

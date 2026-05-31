@@ -33,6 +33,7 @@ export default function SubmitSighting() {
   const [msg, setMsg] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedMatch, setSubmittedMatch] = useState(null);
 
   useEffect(() => {
     api.get('/cases')
@@ -95,6 +96,10 @@ export default function SubmitSighting() {
 
   async function submit(e) {
     e.preventDefault();
+    if (!form.missing_person_id && !image) {
+      setMsg('Please select a missing person or upload a clear photo so the system can match the sighting.');
+      return;
+    }
     setSubmitting(true);
     setMsg('');
     const fd = new FormData();
@@ -103,7 +108,8 @@ export default function SubmitSighting() {
     fd.append('lng', pos.lng);
     if (image) fd.append('image', image);
     try {
-      await api.post('/sightings', fd);
+      const r = await api.post('/sightings', fd);
+      setSubmittedMatch(r.data?.auto_match || null);
       setSubmitted(true);
     } catch (err) {
       setMsg(err.response?.data?.message || 'Failed to submit sighting. Please try again.');
@@ -120,10 +126,14 @@ export default function SubmitSighting() {
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#27AE60" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
           <h2 style={{ margin: '0 0 10px', fontSize: 22, fontWeight: 800 }}>{t('ss.success_title')}</h2>
-          <p style={{ color: 'var(--muted)', marginBottom: 28 }}>{t('ss.success_sub')}</p>
+          <p style={{ color: 'var(--muted)', marginBottom: 28 }}>
+            {submittedMatch
+              ? `Photo matched with ${submittedMatch.name}. This sighting was added to that case history.`
+              : t('ss.success_sub')}
+          </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link className="btn" to="/cases">{t('ss.view_cases')}</Link>
-            <button className="btn outline" onClick={() => { setSubmitted(false); setForm({ missing_person_id: '', location_text: '', sighted_at: currentLocalDateTimeInput(), description: '', confidence_level: 'maybe', reporter_name: '', reporter_phone: '' }); setImage(null); setAnonymous(true); }}>
+            <button className="btn outline" onClick={() => { setSubmitted(false); setSubmittedMatch(null); setForm({ missing_person_id: '', location_text: '', sighted_at: currentLocalDateTimeInput(), description: '', confidence_level: 'maybe', reporter_name: '', reporter_phone: '' }); setImage(null); setAnonymous(true); }}>
               {t('ss.submit_another')}
             </button>
           </div>
@@ -178,18 +188,21 @@ export default function SubmitSighting() {
           {/* Select person */}
           <div>
             <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
-              {t('ss.who')} <span style={{ color: 'var(--danger)' }}>*</span>
+              Who did you see?
+              <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>Optional if you upload a photo</span>
             </label>
             <select
               value={form.missing_person_id}
               onChange={e => setForm({ ...form, missing_person_id: e.target.value })}
-              required
             >
-              <option value="">{t('ss.who_placeholder')}</option>
+              <option value="">I am not sure - scan my photo automatically</option>
               {cases.map(c => (
                 <option key={c.id} value={c.id}>{c.name} — {c.last_seen_location}</option>
               ))}
             </select>
+            <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 0' }}>
+              If you do not know the person, upload a clear face photo. The system will scan active cases and attach this sighting to the matched case history.
+            </p>
           </div>
 
           {/* Contact info (optional) */}
@@ -288,7 +301,7 @@ export default function SubmitSighting() {
           <div>
             <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
               {t('ss.photo')}
-              <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>{t('ss.photo_sub')}</span>
+              <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 6 }}>Required when the person is unknown</span>
             </label>
             <div style={{ border: '2px dashed var(--border)', borderRadius: 10, padding: '16px 20px', background: 'var(--bg)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>

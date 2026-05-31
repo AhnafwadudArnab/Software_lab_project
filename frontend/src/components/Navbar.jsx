@@ -50,7 +50,6 @@ export default function Navbar() {
         </div>
       </Link>
 
-      <NotificationsBell />
 
       <nav>
         {/* ── CENTER: public nav links (guardian/guest only) ── */}
@@ -98,6 +97,8 @@ export default function Navbar() {
 
         {/* ── RIGHT: auth + lang controls ── */}
         <div className="nav-right">
+          {/* Notifications bell moved to right side for role-aware placement */}
+          <NotificationsBell />
           {isAdmin && (
             <Link to="/" style={isActive('/') ? { color: 'var(--text)' } : {}}>{t('nav.home')}</Link>
           )}

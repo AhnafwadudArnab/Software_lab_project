@@ -23,7 +23,15 @@ export default function Register() {
       await register(form);
       nav('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      console.error('Register error', err);
+      // Show Zod validation details if present
+      const serverMsg = err.response?.data?.message;
+      const serverErrors = err.response?.data?.errors;
+      if (serverErrors && Array.isArray(serverErrors) && serverErrors.length) {
+        setError(serverErrors.map(e => `${e.field}: ${e.message}`).join(' • '));
+      } else {
+        setError(serverMsg || 'Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

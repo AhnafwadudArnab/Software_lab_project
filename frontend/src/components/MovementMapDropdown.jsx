@@ -48,10 +48,10 @@ export default function MovementMapDropdown({ cases = [], initialCaseId = '' }) 
       title: point.source === 'last_seen' ? selectedCase?.name || 'Last seen' : `${selectedCase?.name || 'Person'} seen`,
       description: `${point.location_text || point.description || ''} • ${formatDate(point.observed_at)}`,
     }));
-    const predictionMarker = prediction ? [{
+    const predictionMarker = prediction && prediction.mode !== 'radius' ? [{
       lat: prediction.lat,
       lng: prediction.lng,
-      title: prediction.mode === 'radius' ? 'Probability radius center' : 'Next probable area',
+      title: 'Next probable area',
       description: `${prediction.area} • Confidence ${prediction.confidence}%`,
     }] : [];
     return [...trailMarkers, ...predictionMarker];
@@ -65,7 +65,9 @@ export default function MovementMapDropdown({ cases = [], initialCaseId = '' }) 
     title: 'Probable search radius',
     description: `${prediction.area} • ${prediction.confidence}% confidence`,
   }] : [];
-  const center = trail[trail.length - 1]
+  const center = prediction?.mode === 'radius'
+    ? [Number(prediction.lat), Number(prediction.lng)]
+    : trail[trail.length - 1]
     ? [Number(trail[trail.length - 1].lat), Number(trail[trail.length - 1].lng)]
     : selectedCase
       ? [Number(selectedCase.last_seen_lat), Number(selectedCase.last_seen_lng)]
@@ -101,7 +103,9 @@ export default function MovementMapDropdown({ cases = [], initialCaseId = '' }) 
             </div>
             {prediction && (
               <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '12px 14px' }}>
-                <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Probable Next Area</div>
+                <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>
+                  {prediction.mode === 'radius' ? 'Probable Search Radius' : 'Probable Next Area'}
+                </div>
                 <div style={{ fontSize: 16, fontWeight: 900 }}>{prediction.area}</div>
                 <div style={{ fontSize: 13, color: '#0369a1', marginTop: 4 }}>
                   Confidence {prediction.confidence}%

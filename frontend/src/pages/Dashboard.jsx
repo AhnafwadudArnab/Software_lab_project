@@ -50,6 +50,31 @@ export default function Dashboard() {
   const [foundUploading, setFoundUploading] = useState({});
   // Req 2.3: notification banner
   const [notifications, setNotifications] = useState([]);
+  const [cctvCameras, setCctvCameras] = useState([]);
+  const [cctvFilter, setCctvFilter] = useState({ region: '', city: '', status: '' });
+  const [cctvRequests, setCctvRequests] = useState([]);
+  const [cctvFormOpen, setCctvFormOpen] = useState(false);
+  const [cctvSaving, setCctvSaving] = useState(false);
+  const [cctvRequestingId, setCctvRequestingId] = useState(null);
+  const [cctvForm, setCctvForm] = useState({
+    name: '',
+    organization: '',
+    owner_name: '',
+    owner_phone: '',
+    owner_email: '',
+    verified_owner: true,
+    region: '',
+    city: '',
+    area: '',
+    location_text: '',
+    access_type: 'owner_upload',
+    status: 'unknown',
+    notes: '',
+  });
+  const [cctvRequestForm, setCctvRequestForm] = useState({
+    missing_person_id: '',
+    request_message: '',
+  });
 
   if (!user) return null;
 
@@ -67,6 +92,12 @@ export default function Dashboard() {
       api.get('/admin/stats')
         .then(r => setStats(r.data))
         .catch(err => console.error('Failed to load stats:', err));
+      api.get('/admin/cctv-cameras')
+        .then(r => setCctvCameras(r.data || []))
+        .catch(err => console.error('Failed to load CCTV cameras:', err));
+      api.get('/admin/cctv-evidence-requests')
+        .then(r => setCctvRequests(r.data || []))
+        .catch(err => console.error('Failed to load CCTV evidence requests:', err));
     }
     // Req 2.2: fetch notifications for the current user
     api.get('/notifications')
@@ -308,6 +339,64 @@ export default function Dashboard() {
     }
   }
 
+  async function createCctvCamera(e) {
+    e.preventDefault();
+    setActionError('');
+    setCctvSaving(true);
+    try {
+      const r = await api.post('/admin/cctv-cameras', cctvForm);
+      setCctvCameras(prev => [...prev, r.data]);
+      setCctvFormOpen(false);
+      setCctvForm({
+        name: '',
+        organization: '',
+        owner_name: '',
+        owner_phone: '',
+        owner_email: '',
+        verified_owner: true,
+        region: '',
+        city: '',
+        area: '',
+        location_text: '',
+        access_type: 'owner_upload',
+        status: 'unknown',
+        notes: '',
+      });
+    } catch (err) {
+      setActionError(err.response?.data?.message || 'Failed to add CCTV camera.');
+    }
+    setCctvSaving(false);
+  }
+
+  async function createCctvEvidenceRequest(camera) {
+    setActionError('');
+    if (!cctvRequestForm.missing_person_id) {
+      setActionError('Please select a missing person case before requesting CCTV evidence.');
+      return;
+    }
+    setCctvRequestingId(camera.id);
+    try {
+      const r = await api.post('/admin/cctv-evidence-requests', {
+        camera_id: camera.id,
+        missing_person_id: cctvRequestForm.missing_person_id,
+        request_message: cctvRequestForm.request_message || null,
+      });
+      const created = {
+        ...r.data,
+        camera_name: camera.name,
+        region: camera.region,
+        city: camera.city,
+        area: camera.area,
+        case_name: cases.find(c => c.id === cctvRequestForm.missing_person_id)?.name,
+        uploads: [],
+      };
+      setCctvRequests(prev => [created, ...prev]);
+    } catch (err) {
+      setActionError(err.response?.data?.message || 'Failed to create CCTV evidence request.');
+    }
+    setCctvRequestingId(null);
+  }
+
   function formatDate(ts) {
     if (!ts) return '--';
     return new Date(ts).toLocaleString(undefined, {
@@ -321,6 +410,16 @@ export default function Dashboard() {
   const pendingCount = cases.filter(c => c.status === 'pending').length;
   const foundCases = cases.filter(c => c.status === 'found').length;
   const isAdminOrPolice = ['admin', 'police'].includes(user.role);
+  const cctvRegions = [...new Set(cctvCameras.map(c => c.region).filter(Boolean))].sort();
+  const cctvCities = [...new Set(cctvCameras
+    .filter(c => !cctvFilter.region || c.region === cctvFilter.region)
+    .map(c => c.city)
+    .filter(Boolean))].sort();
+  const filteredCctvCameras = cctvCameras.filter(c => (
+    (!cctvFilter.region || c.region === cctvFilter.region) &&
+    (!cctvFilter.city || c.city === cctvFilter.city) &&
+    (!cctvFilter.status || c.status === cctvFilter.status)
+  ));
 
   // Admin: separate active/pending cases from found cases (found goes to history)
   const activeCasesList = user.role === 'admin'
@@ -359,6 +458,11 @@ export default function Dashboard() {
             <button className={`db-nav-item ${activeTab === 'map' ? 'active' : ''}`} onClick={() => setActiveTab('map')}>
               {t('dash.map')}
             </button>
+            {user.role === 'admin' && (
+              <button className={`db-nav-item ${activeTab === 'cctv' ? 'active' : ''}`} onClick={() => setActiveTab('cctv')}>
+                CCTV Evidence
+              </button>
+            )}
           </nav>
           <div className="db-sidebar-stats">
             <div className="db-stat-row"><span>Total</span><b>{totalCases}</b></div>
@@ -997,6 +1101,203 @@ export default function Dashboard() {
                     </>
                   )}
                 </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'cctv' && user.role === 'admin' && (
+            <>
+              <div className="db-header cctv-header">
+                <div>
+                  <h1 className="db-title">CCTV Evidence Requests</h1>
+                  <p className="db-subtitle">No unauthorized camera access. Verified CCTV owners and authorities share footage through secure case-specific upload links.</p>
+                </div>
+                <button className="rc-btn-submit cctv-add-btn" onClick={() => setCctvFormOpen(open => !open)}>
+                  {cctvFormOpen ? 'Close Form' : '+ Add Camera'}
+                </button>
+              </div>
+
+              {cctvFormOpen && (
+                <form className="cctv-form panel" onSubmit={createCctvCamera}>
+                  <div className="cctv-form-grid">
+                    <label>
+                      Camera Name
+                      <input required value={cctvForm.name} onChange={e => setCctvForm(f => ({ ...f, name: e.target.value }))} />
+                    </label>
+                    <label>
+                      Organization
+                      <input value={cctvForm.organization} onChange={e => setCctvForm(f => ({ ...f, organization: e.target.value }))} />
+                    </label>
+                    <label>
+                      Owner / Authority
+                      <input value={cctvForm.owner_name} onChange={e => setCctvForm(f => ({ ...f, owner_name: e.target.value }))} />
+                    </label>
+                    <label>
+                      Owner Contact
+                      <input value={cctvForm.owner_phone} onChange={e => setCctvForm(f => ({ ...f, owner_phone: e.target.value }))} />
+                    </label>
+                    <label>
+                      Region
+                      <input required value={cctvForm.region} onChange={e => setCctvForm(f => ({ ...f, region: e.target.value }))} placeholder="Dhaka Division" />
+                    </label>
+                    <label>
+                      City
+                      <input required value={cctvForm.city} onChange={e => setCctvForm(f => ({ ...f, city: e.target.value }))} placeholder="Dhaka" />
+                    </label>
+                    <label>
+                      Area
+                      <input value={cctvForm.area} onChange={e => setCctvForm(f => ({ ...f, area: e.target.value }))} placeholder="Uttara" />
+                    </label>
+                    <label>
+                      Access Type
+                      <select value={cctvForm.access_type} onChange={e => setCctvForm(f => ({ ...f, access_type: e.target.value }))}>
+                        <option value="owner_upload">Owner Upload</option>
+                        <option value="authority">Authority Share</option>
+                        <option value="authorized">Authorized Request</option>
+                      </select>
+                    </label>
+                    <label>
+                      Verified Owner
+                      <select value={String(cctvForm.verified_owner)} onChange={e => setCctvForm(f => ({ ...f, verified_owner: e.target.value === 'true' }))}>
+                        <option value="true">Verified</option>
+                        <option value="false">Not Verified</option>
+                      </select>
+                    </label>
+                    <label className="cctv-form-wide">
+                      Location
+                      <input value={cctvForm.location_text} onChange={e => setCctvForm(f => ({ ...f, location_text: e.target.value }))} />
+                    </label>
+                    <label className="cctv-form-wide">
+                      Notes
+                      <textarea rows="3" value={cctvForm.notes} onChange={e => setCctvForm(f => ({ ...f, notes: e.target.value }))} />
+                    </label>
+                  </div>
+                  <button className="rc-btn-submit" type="submit" disabled={cctvSaving}>
+                    {cctvSaving ? 'Saving...' : 'Save Camera'}
+                  </button>
+                </form>
+              )}
+
+              <div className="cctv-filter-bar">
+                <select value={cctvFilter.region} onChange={e => setCctvFilter({ region: e.target.value, city: '', status: cctvFilter.status })}>
+                  <option value="">All Regions</option>
+                  {cctvRegions.map(region => <option key={region} value={region}>{region}</option>)}
+                </select>
+                <select value={cctvFilter.city} onChange={e => setCctvFilter(f => ({ ...f, city: e.target.value }))}>
+                  <option value="">All Cities</option>
+                  {cctvCities.map(city => <option key={city} value={city}>{city}</option>)}
+                </select>
+                <select value={cctvFilter.status} onChange={e => setCctvFilter(f => ({ ...f, status: e.target.value }))}>
+                  <option value="">All Status</option>
+                  <option value="online">Online</option>
+                  <option value="offline">Offline</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </div>
+
+              <div className="cctv-request-panel panel">
+                <div>
+                  <h3>Request Footage For Case</h3>
+                  <p>Select an active missing person case, then request evidence from a verified CCTV owner.</p>
+                </div>
+                <select value={cctvRequestForm.missing_person_id} onChange={e => setCctvRequestForm(f => ({ ...f, missing_person_id: e.target.value }))}>
+                  <option value="">Select Case</option>
+                  {cases.filter(c => c.status !== 'found' && c.status !== 'closed' && c.status !== 'rejected').map(c => (
+                    <option key={c.id} value={c.id}>{c.name} - {c.id}</option>
+                  ))}
+                </select>
+                <textarea
+                  rows="3"
+                  placeholder="Request message, time range, and case context"
+                  value={cctvRequestForm.request_message}
+                  onChange={e => setCctvRequestForm(f => ({ ...f, request_message: e.target.value }))}
+                />
+              </div>
+
+              {filteredCctvCameras.length === 0 ? (
+                <div className="db-empty">
+                  <p>No CCTV cameras found for this filter.</p>
+                </div>
+              ) : (
+                <div className="cctv-grid">
+                  {filteredCctvCameras.map(camera => (
+                    <div key={camera.id} className="cctv-card">
+                      <div className="cctv-card-body">
+                        <div className="cctv-card-top">
+                          <div>
+                            <h3>{camera.name}</h3>
+                            <p>{camera.organization || 'Authorized registry'}</p>
+                          </div>
+                          <span className={`cctv-status ${camera.verified_owner ? 'online' : 'unknown'}`}>
+                            {camera.verified_owner ? 'verified' : 'unverified'}
+                          </span>
+                        </div>
+                        <div className="cctv-meta">
+                          <span>{camera.region}</span>
+                          <span>{camera.city}</span>
+                          {camera.area && <span>{camera.area}</span>}
+                        </div>
+                        {(camera.owner_name || camera.owner_phone || camera.owner_email) && (
+                          <p className="cctv-location">
+                            Owner/Authority: {[camera.owner_name, camera.owner_phone, camera.owner_email].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                        {camera.location_text && <p className="cctv-location">{camera.location_text}</p>}
+                        {camera.notes && <p className="cctv-notes">{camera.notes}</p>}
+                        <div className="cctv-actions">
+                          <button
+                            className="db-mini-btn"
+                            disabled={cctvRequestingId === camera.id || !camera.verified_owner}
+                            onClick={() => createCctvEvidenceRequest(camera)}
+                          >
+                            {cctvRequestingId === camera.id ? 'Requesting...' : 'Request Evidence'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="cctv-requests-section">
+                <h2>Evidence Requests</h2>
+                {cctvRequests.length === 0 ? (
+                  <div className="db-empty">
+                    <p>No CCTV evidence requests yet.</p>
+                  </div>
+                ) : (
+                  <div className="cctv-request-list">
+                    {cctvRequests.map(request => {
+                      const uploadUrl = `${window.location.origin}/cctv-evidence/upload/${request.upload_token}`;
+                      return (
+                        <div key={request.id} className="cctv-request-card">
+                          <div className="cctv-card-top">
+                            <div>
+                              <h3>{request.camera_name}</h3>
+                              <p>{request.case_name || request.missing_person_id} · {request.city}{request.area ? ` · ${request.area}` : ''}</p>
+                            </div>
+                            <span className={`cctv-status ${request.request_status === 'submitted' ? 'online' : 'unknown'}`}>{request.request_status}</span>
+                          </div>
+                          {request.request_message && <p className="cctv-notes">{request.request_message}</p>}
+                          <div className="cctv-upload-link">
+                            <input readOnly value={uploadUrl} onFocus={e => e.target.select()} />
+                            <a className="db-mini-btn" href={uploadUrl} target="_blank" rel="noreferrer">Open Upload</a>
+                          </div>
+                          {request.uploads?.length > 0 && (
+                            <div className="cctv-evidence-files">
+                              {request.uploads.map(upload => (
+                                <a key={upload.id} href={upload.evidence_url} target="_blank" rel="noreferrer">
+                                  {upload.file_type?.startsWith('video/') ? 'Video Evidence' : 'Image Evidence'} · {formatDate(upload.created_at)}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </>
           )}

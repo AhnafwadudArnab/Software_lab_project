@@ -17,6 +17,7 @@ import CaseDetails from './pages/CaseDetails';
 import SubmitSighting from './pages/SubmitSighting';
 import MissingCases from './pages/MissingCases';
 import Sightings from './pages/Sightings';
+import CctvEvidenceUpload from './pages/CctvEvidenceUpload';
 import { initSyncListener } from './utils/syncQueue';
 
 // Start the offline queue sync listener once on app startup
@@ -36,6 +37,7 @@ createRoot(document.getElementById('root')).render(
               <Route path="/cases/:id" element={<CaseDetails />} />
               <Route path="/sightings" element={<Sightings />} />
               <Route path="/sighting/:id?" element={<SubmitSighting />} />
+              <Route path="/cctv-evidence/upload/:token" element={<CctvEvidenceUpload />} />
               <Route path="/report" element={<ReportCase />} />
               {/* Role-based dashboards */}
               <Route path="/dashboard" element={

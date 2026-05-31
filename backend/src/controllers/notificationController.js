@@ -6,14 +6,22 @@ import { query } from '../config/db.js';
  */
 export async function getNotifications(req, res, next) {
   try {
-    const result = await query(
-      `SELECT n.*, mp.name AS case_name
-       FROM notifications n
-       LEFT JOIN missing_persons mp ON mp.id = n.case_id
-       WHERE n.user_id = $1
-       ORDER BY n.created_at DESC`,
-      [req.user.id]
-    );
+    // Support admin/police 'all' view via ?all=true. Admins get all notifications;
+    // police get their own plus public case-related notifications (new sightings, face_match, found photos).
+    const wantAll = req.query.all === 'true';
+    let sql, params;
+    if (wantAll && req.user.role === 'admin') {
+      sql = `SELECT n.*, mp.name AS case_name FROM notifications n LEFT JOIN missing_persons mp ON mp.id = n.case_id ORDER BY n.created_at DESC`;
+      params = [];
+    } else if (wantAll && req.user.role === 'police') {
+      // Police should see their own notifications plus system-level alerts related to cases
+      sql = `SELECT n.*, mp.name AS case_name FROM notifications n LEFT JOIN missing_persons mp ON mp.id = n.case_id WHERE n.user_id = $1 OR n.type IN ('new_sighting','face_match','found_person_photo','police_update','request_info') ORDER BY n.created_at DESC`;
+      params = [req.user.id];
+    } else {
+      sql = `SELECT n.*, mp.name AS case_name FROM notifications n LEFT JOIN missing_persons mp ON mp.id = n.case_id WHERE n.user_id = $1 ORDER BY n.created_at DESC`;
+      params = [req.user.id];
+    }
+    const result = await query(sql, params);
     res.json(result.rows);
   } catch (e) {
     next(e);

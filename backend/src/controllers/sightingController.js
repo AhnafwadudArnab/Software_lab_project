@@ -5,7 +5,7 @@ import { verifyReportWithAI } from '../utils/aiVerifier.js';
 import { compareFacesWithInsightFace, isInsightFaceConfigured } from '../utils/insightFace.js';
 
 const sightingSchema = z.object({
-  missing_person_id: z.string().min(1),  // TEXT id like missing-report_001
+  missing_person_id: z.string().min(1).optional().or(z.literal('')),  // TEXT id like missing-report_001
   location_text: z.string().optional(),
   lat: z.coerce.number(),
   lng: z.coerce.number(),
@@ -126,71 +126,35 @@ function predictNextArea(points) {
   const valid = points.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng));
   if (valid.length === 0) return null;
 
-  const last = valid[valid.length - 1];
-  if (valid.length === 1) {
-    return {
-      lat: last.lat,
-      lng: last.lng,
-      area: `Near ${compactAreaName(last.location_text)}`,
-      confidence: 35,
-      mode: 'point',
-      distance_km: 0,
-      basis: 'Only the original last-seen point is available.',
-    };
-  }
-
-  const maxDistance = maxTrailDistanceKm(valid);
+  const first = valid[0];
   const sightingPoints = valid.filter(p => p.source !== 'last_seen');
-
-  if (maxDistance <= LONG_DISTANCE_ROUTE_KM && sightingPoints.length >= MIN_CLUSTER_SIGHTINGS) {
-    const clusterCenter = centroid(sightingPoints);
-    const radiusKm = Math.max(
-      0.5,
-      ...sightingPoints.map(point => distanceKm(clusterCenter, point))
-    );
-    const confidence = radiusConfidence(sightingPoints, radiusKm);
-
-    return {
-      lat: Number(clusterCenter.lat.toFixed(6)),
-      lng: Number(clusterCenter.lng.toFixed(6)),
-      area: `Within ${Number(radiusKm.toFixed(1))} km of ${compactAreaName(last.location_text)}`,
-      confidence,
-      mode: 'radius',
-      radius_km: Number(radiusKm.toFixed(2)),
-      radius_meters: Math.round(radiusKm * 1000),
-      distance_km: Number(maxDistance.toFixed(2)),
-      basis: `${sightingPoints.length} nearby verified sightings inside ${LONG_DISTANCE_ROUTE_KM} km. Radius shows the probable search zone.`,
-    };
-  }
-
-  let totalWeight = 0;
-  let avgLatDelta = 0;
-  let avgLngDelta = 0;
-  for (let i = 1; i < valid.length; i += 1) {
-    const weight = i;
-    avgLatDelta += (valid[i].lat - valid[i - 1].lat) * weight;
-    avgLngDelta += (valid[i].lng - valid[i - 1].lng) * weight;
-    totalWeight += weight;
-  }
-
-  avgLatDelta /= totalWeight;
-  avgLngDelta /= totalWeight;
-  const projectedLat = last.lat + avgLatDelta;
-  const projectedLng = last.lng + avgLngDelta;
-  const direction = directionLabel(avgLatDelta, avgLngDelta);
+  const latestUpdate = sightingPoints[sightingPoints.length - 1];
+  const circleCenter = latestUpdate || first;
+  const pointDistancesFromCenter = valid
+    .map(point => distanceKm(circleCenter, point))
+    .filter(Number.isFinite);
+  const radiusKm = sightingPoints.length === 0
+    ? 2
+    : Math.max(1, Math.min(25, Math.max(...pointDistancesFromCenter, 0) + 0.5));
+  const firstToLatestKm = latestUpdate ? distanceKm(first, latestUpdate) : 0;
+  const confidence = sightingPoints.length === 0
+    ? 35
+    : Math.min(70, 40 + sightingPoints.length * 6);
 
   return {
-    lat: Number(projectedLat.toFixed(6)),
-    lng: Number(projectedLng.toFixed(6)),
-    area: direction === 'nearby'
-      ? `Near ${compactAreaName(last.location_text)}`
-      : `${direction} of ${compactAreaName(last.location_text)}`,
-    confidence: confidenceFromTrail(valid),
-    mode: maxDistance > LONG_DISTANCE_ROUTE_KM ? 'route' : 'point',
-    distance_km: Number(maxDistance.toFixed(2)),
-    basis: maxDistance > LONG_DISTANCE_ROUTE_KM
-      ? `Long-distance movement over ${LONG_DISTANCE_ROUTE_KM} km. Straight route line is shown.`
-      : `Fewer than ${MIN_CLUSTER_SIGHTINGS} nearby verified sightings, so radius prediction is not confident yet.`,
+    lat: Number(circleCenter.lat.toFixed(6)),
+    lng: Number(circleCenter.lng.toFixed(6)),
+    area: latestUpdate
+      ? `Search radius around ${compactAreaName(latestUpdate.location_text)}`
+      : `Search radius around ${compactAreaName(first.location_text)}`,
+    confidence,
+    mode: 'radius',
+    radius_km: Number(radiusKm.toFixed(2)),
+    radius_meters: Math.round(radiusKm * 1000),
+    distance_km: Number(firstToLatestKm.toFixed(2)),
+    basis: sightingPoints.length === 0
+      ? 'Only the original last-seen point is available, so the default search radius is 2 km.'
+      : `Radius center is the latest verified sighting update. Radius expands to cover known points with a 0.5 km buffer.`,
   };
 }
 
@@ -213,7 +177,7 @@ async function fetchImageBuffer(url) {
   }
 }
 
-async function saveAutomaticFaceScan({ sightingId, missingPersonId, queryBuffer, queryMimeType, scannedImageUrl }) {
+async function saveAutomaticFaceScan({ sightingId, missingPersonId, queryBuffer, queryMimeType, scannedImageUrl, precomputedMatch }) {
   if (!queryBuffer) return null;
 
   let scanStatus = 'error';
@@ -221,6 +185,15 @@ async function saveAutomaticFaceScan({ sightingId, missingPersonId, queryBuffer,
   let scanMetadata = {};
 
   try {
+    if (precomputedMatch) {
+      faceMatchScore = precomputedMatch.score;
+      scanStatus = faceMatchScore >= FACE_MATCH_THRESHOLD ? 'matched' : 'low_confidence';
+      scanMetadata = {
+        referenceUrl: precomputedMatch.referenceUrl,
+        raw: precomputedMatch.raw,
+        matchedByGlobalScan: true,
+      };
+    } else {
     const referenceResult = await query(
       'SELECT image_url FROM person_images WHERE missing_person_id=$1 ORDER BY created_at ASC LIMIT 1',
       [missingPersonId]
@@ -256,6 +229,7 @@ async function saveAutomaticFaceScan({ sightingId, missingPersonId, queryBuffer,
         }
       }
     }
+    }
 
     const result = await query(
       `INSERT INTO sighting_face_scans
@@ -288,6 +262,60 @@ async function saveAutomaticFaceScan({ sightingId, missingPersonId, queryBuffer,
   }
 }
 
+async function identifyMissingPersonFromImage({ queryBuffer, queryMimeType }) {
+  if (!queryBuffer) return null;
+  if (!isInsightFaceConfigured()) {
+    return { error: 'Face scan service is not configured. Please select a missing person or try again later.' };
+  }
+
+  const candidates = await query(
+    `SELECT mp.id, mp.name,
+            COALESCE(json_agg(DISTINCT pi.image_url) FILTER (WHERE pi.image_url IS NOT NULL), '[]') AS images
+     FROM missing_persons mp
+     LEFT JOIN person_images pi ON pi.missing_person_id = mp.id
+     WHERE mp.status IN ('active','verified','pending')
+     GROUP BY mp.id
+     ORDER BY mp.created_at DESC`
+  );
+
+  let best = null;
+  for (const candidate of candidates.rows) {
+    const images = Array.isArray(candidate.images) ? candidate.images.slice(0, 3) : [];
+    for (const imageUrl of images) {
+      const referenceImage = await fetchImageBuffer(imageUrl);
+      if (!referenceImage) continue;
+
+      const comparison = await compareFacesWithInsightFace({
+        queryBuffer,
+        queryMimeType,
+        referenceBuffer: referenceImage.buffer,
+        referenceMimeType: referenceImage.mimeType,
+      });
+
+      if (comparison && (!best || comparison.score > best.score)) {
+        best = {
+          missingPersonId: candidate.id,
+          name: candidate.name,
+          score: comparison.score,
+          referenceUrl: imageUrl,
+          raw: comparison.raw,
+        };
+      }
+    }
+  }
+
+  if (!best || best.score < FACE_MATCH_THRESHOLD) {
+    return {
+      error: best
+        ? `No confident match found. Best score was ${best.score}%, below the ${FACE_MATCH_THRESHOLD}% threshold.`
+        : 'No matching face was found in active missing person cases.',
+      best,
+    };
+  }
+
+  return { match: best };
+}
+
 export async function createSighting(req, res, next) {
   try {
     const data = sightingSchema.parse(req.body);
@@ -300,6 +328,29 @@ export async function createSighting(req, res, next) {
       const uploaded = await uploadBufferToCloudinary(req.file.buffer, 'missing-diary/sightings');
       imageUrl = uploaded.secure_url;
     }
+
+    let matchedPersonId = data.missing_person_id || null;
+    let autoMatch = null;
+    if (!matchedPersonId) {
+      if (!sightingImageBuffer || !sightingImageMimeType?.startsWith('image/')) {
+        return res.status(400).json({
+          message: 'Please select a missing person or upload a clear photo so the system can match this sighting.',
+        });
+      }
+
+      const identification = await identifyMissingPersonFromImage({
+        queryBuffer: sightingImageBuffer,
+        queryMimeType: sightingImageMimeType,
+      });
+
+      if (identification?.error) {
+        return res.status(422).json({ message: identification.error });
+      }
+
+      autoMatch = identification.match;
+      matchedPersonId = autoMatch.missingPersonId;
+    }
+
     const aiResult = await verifyReportWithAI({
       description: data.description,
       last_seen_location: data.location_text,
@@ -311,24 +362,25 @@ export async function createSighting(req, res, next) {
       (missing_person_id, reported_by, reporter_name, reporter_phone, location_text, lat, lng, description,
        image_url, confidence_level, status, ai_score, ai_flags, sighted_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,COALESCE($13::timestamp, NOW())) RETURNING *`,
-      [data.missing_person_id, req.user?.id || null, data.reporter_name || null, data.reporter_phone || null,
+      [matchedPersonId, req.user?.id || null, data.reporter_name || null, data.reporter_phone || null,
        data.location_text || null, data.lat, data.lng, data.description, imageUrl, data.confidence_level, aiScore, aiFlags,
        data.sighted_at || null]
     );
     const sighting = result.rows[0];
     const faceScan = await saveAutomaticFaceScan({
       sightingId: sighting.id,
-      missingPersonId: data.missing_person_id,
+      missingPersonId: matchedPersonId,
       queryBuffer: sightingImageBuffer,
       queryMimeType: sightingImageMimeType,
       scannedImageUrl: imageUrl,
+      precomputedMatch: autoMatch,
     });
     await notifyAdminPolice({
-      caseId: data.missing_person_id,
+      caseId: matchedPersonId,
       type: 'new_sighting',
-      message: `New sighting for ${data.missing_person_id} at ${data.location_text || 'unknown location'} on ${formatObservedAt(sighting.sighted_at || sighting.created_at)}.`,
+      message: `${autoMatch ? `Auto-matched sighting for ${autoMatch.name} (${autoMatch.score}%).` : `New sighting for ${matchedPersonId}.`} Location: ${data.location_text || 'unknown location'} on ${formatObservedAt(sighting.sighted_at || sighting.created_at)}.`,
     });
-    res.status(201).json({ ...sighting, face_scan: faceScan });
+    res.status(201).json({ ...sighting, face_scan: faceScan, auto_match: autoMatch });
   } catch (e) { next(e); }
 }
 
