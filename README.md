@@ -97,14 +97,14 @@ The platform supports multiple user roles:
 ## 🏗️ System Architecture
 
 ```text
-Frontend (React + Vite)
+Frontend (React)
         │
         ▼
 Backend API (Node.js + Express)
         │
- ┌──────┴──────┐
- ▼             ▼
-PostgreSQL   Cloudinary
+ ┌──────┴───────┐
+ ▼              ▼
+Supabase      Cloudinary
 Database     Media Storage
 ```
 
@@ -115,7 +115,6 @@ Database     Media Storage
 ### Frontend
 
 - React.js
-- Vite
 - React Router
 - Axios
 - Leaflet
@@ -125,14 +124,11 @@ Database     Media Storage
 
 - Node.js
 - Express.js
-- JWT Authentication
-- Multer
-- Zod
-- Helmet
+- FaceAi
 
 ### Database
 
-- PostgreSQL
+- Supabase
 
 ### Storage
 
@@ -145,9 +141,6 @@ Database     Media Storage
 
 ### Testing
 
-- Jest
-- Supertest
-- Vitest
 - Testing Library
 - fast-check
 
@@ -200,6 +193,7 @@ Software_lab_project/
 
 - Node.js 18 or higher
 - npm
+- Supabase
 - PostgreSQL
 - Python 3, if using the InsightFace service
 - Cloudinary account, if using image uploads
