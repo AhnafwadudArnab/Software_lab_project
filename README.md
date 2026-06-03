@@ -30,11 +30,11 @@ Missing Diary Full centralizes missing person reports, public sightings, police 
 
 ## 👥 Team Trinity-Killers
 
-| ![Saad](assets/contributors/saad.jpg) | ![Maher](assets/contributors/maher.jpg) | ![Ahnaf](assets/contributors/ahnaf.png) |
+| ![Ahnaf Wadud Arnab](assets/contributors/ahnaf-thumb.jpg) | ![S.M Shihab Adnan Saad](assets/contributors/saad-thumb.jpg) | ![Mushfiq Labib Maher](assets/contributors/maher-thumb.jpg) |
 | --- | --- | --- |
-| [**Saad**](https://github.com/0Boolean0) | [**Maher**](https://github.com/MushfiqLabibMaher) | [**Ahnaf**](https://github.com/AhnafwadudArnab) |
-| [@0Boolean0](https://github.com/0Boolean0) | [@MushfiqLabibMaher](https://github.com/MushfiqLabibMaher) | [@AhnafwadudArnab](https://github.com/AhnafwadudArnab) |
-| Mapping + Backend | Frontend + Backend | Team Lead + Frontend + Backend |
+| [**Ahnaf**](https://github.com/AhnafwadudArnab) | [**Saad**](https://github.com/0Boolean0) | [**Maher**](https://github.com/MushfiqLabibMaher) |
+| [@AhnafwadudArnab](https://github.com/AhnafwadudArnab) | [@0Boolean0](https://github.com/0Boolean0) | [@MushfiqLabibMaher](https://github.com/MushfiqLabibMaher) |
+| Team Lead + Frontend + Backend | Mapping + Backend | Frontend + Backend |
 
 ---
 
