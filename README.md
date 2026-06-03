@@ -154,7 +154,7 @@ Use the `.env.example` files as templates and never commit a filled `.env` file.
 
 ## 👥 Team
 
-| ![Saad](assets/contributors/saad.jpg) | ![Maher](assets/contributors/maher.jpg) | ![Ahnaf](assets/contributors/ahnaf.jpg) |
+| ![Saad](./assets/contributors/saad.jpg) | ![Maher](./assets/contributors/maher.jpg) | ![Ahnaf](./assets/contributors/ahnaf.jpg) |
 | --- | --- | --- |
 | [**Saad**](https://github.com/0Boolean0) | [**Maher**](https://github.com/MushfiqLabibMaher) | [**Ahnaf**](https://github.com/AhnafwadudArnab) |
 | [@0Boolean0](https://github.com/0Boolean0) | [@MushfiqLabibMaher](https://github.com/MushfiqLabibMaher) | [@AhnafwadudArnab](https://github.com/AhnafwadudArnab) |
