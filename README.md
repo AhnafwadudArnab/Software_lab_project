@@ -26,6 +26,18 @@ Missing Diary Full centralizes missing person reports, public sightings, police 
 - Offline Queue Support - Frontend utilities help queue actions when connectivity is limited.
 - Responsive Interface - Built with React, Vite, and reusable UI components.
 
+---
+
+## 👥 Team Trinity-Killers
+
+| ![Saad](assets/contributors/saad.jpg) | ![Maher](assets/contributors/maher.jpg) | ![Ahnaf](assets/contributors/ahnaf.png) |
+| --- | --- | --- |
+| [**Saad**](https://github.com/0Boolean0) | [**Maher**](https://github.com/MushfiqLabibMaher) | [**Ahnaf**](https://github.com/AhnafwadudArnab) |
+| [@0Boolean0](https://github.com/0Boolean0) | [@MushfiqLabibMaher](https://github.com/MushfiqLabibMaher) | [@AhnafwadudArnab](https://github.com/AhnafwadudArnab) |
+| Mapping + Backend | Frontend + Backend | Team Lead + Frontend + Backend |
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -149,18 +161,6 @@ The workflow should run backend and frontend tests on push and pull requests.
 The repository should not contain committed secrets. If live credentials were ever committed, rotate them immediately, including database passwords, JWT secrets, Cloudinary keys, and AI service keys.
 
 Use the `.env.example` files as templates and never commit a filled `.env` file. Add local secrets to your deployment environment or secret manager.
-
----
-
-## 👥 Team
-
-| ![Saad](./assets/contributors/saad.jpg) | ![Maher](./assets/contributors/maher.jpg) | ![Ahnaf](./assets/contributors/ahnaf.jpg) |
-| --- | --- | --- |
-| [**Saad**](https://github.com/0Boolean0) | [**Maher**](https://github.com/MushfiqLabibMaher) | [**Ahnaf**](https://github.com/AhnafwadudArnab) |
-| [@0Boolean0](https://github.com/0Boolean0) | [@MushfiqLabibMaher](https://github.com/MushfiqLabibMaher) | [@AhnafwadudArnab](https://github.com/AhnafwadudArnab) |
-| Mapping + Backend | Frontend + Backend | Team Lead + Frontend + Backend |
-
----
 
 ## Contributing
 
