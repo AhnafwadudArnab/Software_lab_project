@@ -5,10 +5,12 @@ import MapView from '../components/MapView';
 import { api } from '../api/client';
 import { describePhoto } from '../utils/aiDescriber';
 import { useLang } from '../context/LangContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function ReportCase() {
   const nav = useNavigate();
   const { t } = useLang();
+  const { refreshUser } = useAuth();
   const [pos, setPos] = useState({ lat: 23.8103, lng: 90.4125 });
   const [geocoding, setGeocoding] = useState(false);
   const geocodeTimer = useRef(null);
@@ -140,6 +142,7 @@ export default function ReportCase() {
     if (videoFile) fd.append('video', videoFile);
     try {
       const { data } = await api.post('/cases', fd);
+      await refreshUser?.();
       nav(`/cases/${data.id}`);
     } catch (err) {
       setMsgType('error');

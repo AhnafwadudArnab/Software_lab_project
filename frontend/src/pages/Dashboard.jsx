@@ -23,6 +23,65 @@ function ScoreBar({ score }) {
   );
 }
 
+function DashboardCaseDetailsWidget({ c, formatDate, onClose, isGuardianOwner }) {
+  const image = c.images?.[0] || 'https://placehold.co/240x240?text=?';
+  const details = [
+    ['Name', c.name],
+    ['Bangla Name', c.name_bn],
+    ['Age', c.age],
+    ['Gender', c.gender],
+    ['Skin Color', c.skin_color],
+    ['Height', c.height],
+    ['Weight', c.weight],
+    ['Status', c.status],
+    ['Last Seen Location', c.last_seen_location],
+    ['Last Seen Time', c.last_seen_time ? formatDate(c.last_seen_time) : null],
+    ['Reporter', c.reporter_name],
+    ['Reporter Phone', c.reporter_phone],
+    ['Relation', c.reporter_relation],
+    ['Clothing', c.clothing],
+    ['Identifying Marks', c.identifying_marks],
+    ['Medical Info', c.medical_info],
+    ['Description', c.description],
+    ['AI Score', c.ai_verification_score != null ? `${c.ai_verification_score}/100` : null],
+    ['Created', c.created_at ? formatDate(c.created_at) : null],
+    ['Updated', c.updated_at ? formatDate(c.updated_at) : null],
+  ].filter(([, value]) => value !== null && value !== undefined && value !== '');
+
+  return (
+    <div className="dc-details-widget">
+      <div className="dc-details-widget-head">
+        <div>
+          <div className="dc-details-eyebrow">Case Details</div>
+          <h3>{c.name}</h3>
+        </div>
+        <button className="db-mini-btn" type="button" onClick={onClose}>Close</button>
+      </div>
+
+      <div className="dc-details-widget-body">
+        <div className="dc-details-photo">
+          <img src={image} alt={c.name} />
+          <span className={`badge ${c.status}`}>{c.status}</span>
+        </div>
+        <div className="dc-details-list">
+          {details.map(([label, value]) => (
+            <div key={label} className="dc-details-field">
+              <span>{label}</span>
+              <b>{value}</b>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="dc-details-actions">
+        <Link className="db-mini-btn" to={`/cases/${c.id}`}>Open Full Page</Link>
+        <Link className="db-mini-btn" to={`/sighting/${c.id}`}>Report Sighting</Link>
+        {isGuardianOwner && <Link className="db-mini-btn verify" to={`/cases/${c.id}`}>Edit Details</Link>}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { t } = useLang();
@@ -43,6 +102,7 @@ export default function Dashboard() {
   const [pendingEdits, setPendingEdits] = useState({});
   const [savingId, setSavingId] = useState(null);
   const [editingIds, setEditingIds] = useState({});
+  const [selectedCaseId, setSelectedCaseId] = useState(null);
   // Req 4: found-photo upload state — keyed by case id
   const [foundUploadOpen, setFoundUploadOpen] = useState({});
   const [foundUploadFile, setFoundUploadFile] = useState({});
@@ -121,6 +181,7 @@ export default function Dashboard() {
     try {
       await api.delete(`/cases/${id}`);
       setCases(cases.filter(c => c.id !== id));
+      if (selectedCaseId === id) setSelectedCaseId(null);
     } catch (err) {
       setActionError(err.response?.data?.message || 'Failed to delete case.');
     }
@@ -236,8 +297,8 @@ export default function Dashboard() {
     setExpandedAudit(prev => ({ ...prev, [caseId]: isExpanding }));
     if (isExpanding && !auditHistory[caseId]) {
       try {
-        const r = await api.get(`/cases/${caseId}`);
-        setAuditHistory(prev => ({ ...prev, [caseId]: r.data.sightings || [] }));
+        const r = await api.get(`/sightings/history/${caseId}`);
+        setAuditHistory(prev => ({ ...prev, [caseId]: r.data.history || [] }));
       } catch {
         setAuditHistory(prev => ({ ...prev, [caseId]: [] }));
       }
@@ -429,6 +490,10 @@ export default function Dashboard() {
     ? cases.filter(c => c.status === 'found')
     : [];
 
+  function toggleCaseDetails(id) {
+    setSelectedCaseId(prev => prev === id ? null : id);
+  }
+
   return (
     <>
       <Navbar />
@@ -463,6 +528,9 @@ export default function Dashboard() {
                 CCTV Evidence
               </button>
             )}
+            <Link className="db-nav-item db-nav-link" to="/profile">
+              User Profile
+            </Link>
           </nav>
           <div className="db-sidebar-stats">
             <div className="db-stat-row"><span>Total</span><b>{totalCases}</b></div>
@@ -541,7 +609,16 @@ export default function Dashboard() {
                             </div>
                             <div className="dc-card-header">
                               <Link to={`/cases/${c.id}`} className="dc-card-name">{c.name}</Link>
-                              <span className={`badge ${c.status}`}>{c.status}</span>
+                              <button
+                                type="button"
+                                className="dc-status-toggle"
+                                onClick={() => toggleCaseDetails(c.id)}
+                                aria-expanded={selectedCaseId === c.id}
+                                aria-label={`Show details for ${c.name}`}
+                              >
+                                <span className="dc-detail-dot" aria-hidden="true" />
+                                <span className={`badge ${c.status}`}>{c.status}</span>
+                              </button>
                               <div className="dc-card-meta">
                                 {c.age && <span>Age: <b>{c.age}</b></span>}
                                 {c.gender && <span>{c.gender}</span>}
@@ -680,6 +757,14 @@ export default function Dashboard() {
                               </div>
                             )}
                           </div>
+                          {selectedCaseId === c.id && (
+                            <DashboardCaseDetailsWidget
+                              c={c}
+                              formatDate={formatDate}
+                              onClose={() => setSelectedCaseId(null)}
+                              isGuardianOwner={user.role === 'guardian' && c.guardian_id === user.id}
+                            />
+                          )}
                           {expandedAudit[c.id] && (
                             <div className="dc-history-panel">
                               <div className="dc-history-title">Sighting History</div>
@@ -690,19 +775,28 @@ export default function Dashboard() {
                               ) : (
                                 <div className="dc-history-list">
                                   {auditHistory[c.id].map((s, i) => (
-                                    <div key={s.id || i} className="dc-history-item">
+                                    <div key={s.sighting_id || s.id || i} className="dc-history-item">
                                       {s.image_url && <img src={s.image_url} alt="sighting" className="dc-history-img" />}
                                       <div className="dc-history-body">
                                         <div className="dc-history-row">
-                                          <span className={`badge ${s.status}`}>{s.status}</span>
-                                          <span className="muted" style={{ fontSize: 12 }}>{formatDate(s.created_at)}</span>
+                                          <span className={`badge ${s.sighting_status || s.status}`}>{s.sighting_status || s.status}</span>
+                                          <span className="muted" style={{ fontSize: 12 }}>{formatDate(s.sighted_at || s.created_at)}</span>
                                         </div>
                                         <div className="dc-history-location">Location: {s.location_text || 'Not specified'}</div>
+                                        {s.lat != null && s.lng != null && (
+                                          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                                            GPS: {Number(s.lat).toFixed(5)}, {Number(s.lng).toFixed(5)}
+                                          </div>
+                                        )}
                                         <div className="dc-history-desc">{s.description}</div>
-                                        {s.status === 'pending' && (
+                                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                                          Reporter: {s.reporter_name || 'Anonymous'}
+                                          {s.face_match_score != null ? ` · Face match ${Number(s.face_match_score).toFixed(1)}%` : ''}
+                                        </div>
+                                        {(s.sighting_status || s.status) === 'pending' && user.role === 'admin' && (
                                           <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                                            <button className="db-mini-btn verify" onClick={() => approveSighting(s.id)}>Approve</button>
-                                            <button className="db-mini-btn reject" onClick={() => rejectSighting(s.id)}>Reject</button>
+                                            <button className="db-mini-btn verify" onClick={() => approveSighting(s.sighting_id || s.id)}>Approve</button>
+                                            <button className="db-mini-btn reject" onClick={() => rejectSighting(s.sighting_id || s.id)}>Reject</button>
                                           </div>
                                         )}
                                       </div>
@@ -735,7 +829,16 @@ export default function Dashboard() {
                               </div>
                               <div className="dc-card-header">
                                 <Link to={`/cases/${c.id}`} className="dc-card-name">{c.name}</Link>
-                                <span className="badge found">found</span>
+                                <button
+                                  type="button"
+                                  className="dc-status-toggle"
+                                  onClick={() => toggleCaseDetails(c.id)}
+                                  aria-expanded={selectedCaseId === c.id}
+                                  aria-label={`Show details for ${c.name}`}
+                                >
+                                  <span className="dc-detail-dot" aria-hidden="true" />
+                                  <span className="badge found">found</span>
+                                </button>
                                 <div className="dc-card-meta">
                                   {c.age && <span>Age: <b>{c.age}</b></span>}
                                   {c.gender && <span>{c.gender}</span>}
@@ -794,6 +897,14 @@ export default function Dashboard() {
                                 </div>
                               </div>
                             </div>
+                            {selectedCaseId === c.id && (
+                              <DashboardCaseDetailsWidget
+                                c={c}
+                                formatDate={formatDate}
+                                onClose={() => setSelectedCaseId(null)}
+                                isGuardianOwner={user.role === 'guardian' && c.guardian_id === user.id}
+                              />
+                            )}
                             {expandedAudit[c.id] && (
                               <div className="dc-history-panel">
                                 <div className="dc-history-title">Sighting History</div>
@@ -804,15 +915,24 @@ export default function Dashboard() {
                                 ) : (
                                   <div className="dc-history-list">
                                     {auditHistory[c.id].map((s, i) => (
-                                      <div key={s.id || i} className="dc-history-item">
+                                      <div key={s.sighting_id || s.id || i} className="dc-history-item">
                                         {s.image_url && <img src={s.image_url} alt="sighting" className="dc-history-img" />}
                                         <div className="dc-history-body">
                                           <div className="dc-history-row">
-                                            <span className={`badge ${s.status}`}>{s.status}</span>
-                                            <span className="muted" style={{ fontSize: 12 }}>{formatDate(s.created_at)}</span>
+                                            <span className={`badge ${s.sighting_status || s.status}`}>{s.sighting_status || s.status}</span>
+                                            <span className="muted" style={{ fontSize: 12 }}>{formatDate(s.sighted_at || s.created_at)}</span>
                                           </div>
                                           <div className="dc-history-location">Location: {s.location_text || 'Not specified'}</div>
+                                          {s.lat != null && s.lng != null && (
+                                            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                                              GPS: {Number(s.lat).toFixed(5)}, {Number(s.lng).toFixed(5)}
+                                            </div>
+                                          )}
                                           <div className="dc-history-desc">{s.description}</div>
+                                          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                                            Reporter: {s.reporter_name || 'Anonymous'}
+                                            {s.face_match_score != null ? ` · Face match ${Number(s.face_match_score).toFixed(1)}%` : ''}
+                                          </div>
                                         </div>
                                       </div>
                                     ))}

@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  addGuardianNote,
   addPoliceUpdate,
   checkCctvCamera,
   createCctvCamera,
@@ -36,5 +37,6 @@ router.post('/cctv-evidence-requests', requireRole('admin', 'police'), createCct
 router.post('/scan-face', requireRole('admin', 'police'), upload.single('image'), scanFaces);
 // Police update notes — admin and police
 router.post('/cases/:id/updates', requireRole('admin', 'police'), addPoliceUpdate);
-router.get('/cases/:id/updates', requireRole('admin', 'police'), getPoliceUpdates);
+router.get('/cases/:id/updates', getPoliceUpdates);
+router.post('/cases/:id/guardian-note', requireRole('guardian'), addGuardianNote);
 export default router;

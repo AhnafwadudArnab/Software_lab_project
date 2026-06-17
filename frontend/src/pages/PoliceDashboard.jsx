@@ -248,6 +248,9 @@ export default function PoliceDashboard() {
             <button className={`db-nav-item ${activeTab === 'scan' ? 'active' : ''}`} onClick={() => setActiveTab('scan')}>
               <IconScan /> Face Scan
             </button>
+            <Link className="db-nav-item db-nav-link" to="/profile">
+              User Profile
+            </Link>
           </nav>
           <div className="db-sidebar-stats">
             <div className="db-stat-row">

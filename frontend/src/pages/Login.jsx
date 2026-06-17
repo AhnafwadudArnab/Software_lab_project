@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
+import { api } from '../api/client';
 import logoGif from '../assets/output-onlinegiftools.gif';
 
 export default function Login() {
@@ -10,8 +11,11 @@ export default function Login() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotMessage, setForgotMessage] = useState('');
   const { login } = useAuth();
-  const { t } = useLang();
+  const { lang, setLang, t } = useLang();
   const nav = useNavigate();
   const [params] = useSearchParams();
   const redirect = params.get('redirect') || '/dashboard';
@@ -32,6 +36,23 @@ export default function Login() {
       setError(err.response?.data?.message || 'Invalid email or password.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function submitForgot(e) {
+    e.preventDefault();
+    const targetEmail = (forgotEmail || email).trim();
+    if (!targetEmail) {
+      setForgotMessage(t('login.forgot_need_email'));
+      return;
+    }
+    setForgotEmail(targetEmail);
+    setForgotMessage(t('login.forgot_sending'));
+    try {
+      const { data } = await api.post('/auth/forgot-password', { email: targetEmail });
+      setForgotMessage(data?.message || t('login.forgot_done'));
+    } catch (err) {
+      setForgotMessage(err.response?.data?.message || t('login.forgot_failed'));
     }
   }
 
@@ -83,6 +104,16 @@ export default function Login() {
       {/* Right Panel */}
       <div className="auth-right">
         <div className="auth-form-card">
+          <div className="auth-top-actions">
+            <button
+              type="button"
+              className="auth-lang-toggle"
+              onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
+              aria-label="Toggle language"
+            >
+              {lang === 'en' ? 'বাংলা' : 'EN'}
+            </button>
+          </div>
           <div className="auth-form-header">
             <div className="auth-form-icon-svg">
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -175,13 +206,47 @@ export default function Login() {
               {loading ? t('login.signing_in') : t('login.submit')}
             </button>
 
-          </form>
+            <div className="auth-login-options">
+              <label className="auth-remember-me">
+                <input type="checkbox" defaultChecked readOnly />
+                <span>{t('login.remember')}</span>
+              </label>
+              <button
+                type="button"
+                className="auth-link-btn auth-forgot-trigger"
+                onClick={() => {
+                  setForgotOpen(open => !open);
+                  setForgotMessage('');
+                  setForgotEmail(email);
+                }}
+              >
+                {t('login.forgot')}
+              </button>
+            </div>
 
-          {/* 3.3.1 — Remember me checkbox (always checked, localStorage handles persistence) */}
-          <label className="auth-remember-me">
-            <input type="checkbox" defaultChecked readOnly />
-            <span>{t('login.remember')}</span>
-          </label>
+            {forgotOpen && (
+              <div className="auth-forgot-box">
+                <b>{t('login.forgot_title')}</b>
+                <p>{t('login.forgot_sub')}</p>
+                <div className="auth-forgot-row">
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={e => {
+                      setForgotEmail(e.target.value);
+                      setForgotMessage('');
+                    }}
+                    placeholder={t('login.email')}
+                  />
+                  <button type="button" className="db-mini-btn verify" onClick={submitForgot}>
+                    {t('login.forgot_send')}
+                  </button>
+                </div>
+                {forgotMessage && <p className="auth-forgot-message">{forgotMessage}</p>}
+              </div>
+            )}
+
+          </form>
 
           <div className="auth-divider"><span>{t('login.or')}</span></div>
 

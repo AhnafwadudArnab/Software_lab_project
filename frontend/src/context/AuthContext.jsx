@@ -91,12 +91,22 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const { data } = await api.get('/auth/me');
+    if (data?.user) {
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setUser(data.user);
+      return data.user;
+    }
+    return null;
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, login, register, logout }), [user, login, register, logout]);
+  const value = useMemo(() => ({ user, login, register, refreshUser, logout }), [user, login, register, refreshUser, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

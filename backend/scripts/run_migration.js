@@ -6,14 +6,22 @@ import { pool } from '../src/config/db.js';
 
 dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const sqlPath = path.join(__dirname, '..', 'databases', 'migrations', '001_add_guardian_id.sql');
-const sql = fs.readFileSync(sqlPath, 'utf8');
+const migrationsDir = path.join(__dirname, '..', 'databases', 'migrations');
 
 async function run() {
   try {
-    console.log('Running migration:', sqlPath);
-    await pool.query(sql);
-    console.log('Migration applied successfully.');
+    const migrations = fs.readdirSync(migrationsDir)
+      .filter(file => file.endsWith('.sql'))
+      .sort();
+
+    for (const migration of migrations) {
+      const sqlPath = path.join(migrationsDir, migration);
+      const sql = fs.readFileSync(sqlPath, 'utf8');
+      console.log('Running migration:', sqlPath);
+      await pool.query(sql);
+    }
+
+    console.log('Migrations applied successfully.');
     await pool.end();
   } catch (err) {
     console.error('Migration failed:', err);

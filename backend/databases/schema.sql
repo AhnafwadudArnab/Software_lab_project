@@ -21,7 +21,7 @@ CREATE TABLE users (
   email         VARCHAR(160) UNIQUE NOT NULL,
   phone         VARCHAR(40),
   password_hash TEXT NOT NULL,
-  role          VARCHAR(20) NOT NULL CHECK (role IN ('admin','police','guardian')) DEFAULT 'guardian',
+  role          VARCHAR(20) NOT NULL CHECK (role IN ('admin','police','guardian','viewer')) DEFAULT 'viewer',
   verified      BOOLEAN DEFAULT FALSE,
   created_at    TIMESTAMP DEFAULT NOW()
 );
@@ -163,7 +163,7 @@ CREATE TABLE notifications (
   id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   case_id    TEXT REFERENCES missing_persons(id) ON DELETE SET NULL,
-  type       VARCHAR(40) NOT NULL CHECK (type IN ('request_info', 'found_person_photo','new_sighting','face_match')),
+  type       VARCHAR(40) NOT NULL CHECK (type IN ('request_info', 'found_person_photo','new_sighting','face_match','guardian_note','police_update')),
   message    TEXT NOT NULL,
   read       BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()

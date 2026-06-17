@@ -24,24 +24,45 @@ export async function addPoliceUpdate(req, res, next) {
       'INSERT INTO police_updates (missing_person_id, police_id, update_text) VALUES ($1,$2,$3) RETURNING *',
       [id, req.user.id, update_text]
     );
-    // Create a notification for the case reporter (guardian) if present
-    try {
-      const caseRow = await query('SELECT guardian_id, name FROM missing_persons WHERE id=$1', [id]);
-      const guardianId = caseRow.rows[0]?.guardian_id;
-      const caseName = caseRow.rows[0]?.name || 'Case';
-      if (guardianId) {
-        const msg = `${req.user.name} added an update for ${caseName}: ${update_text.slice(0, 240)}`;
-        await query(
-          'INSERT INTO notifications (user_id, case_id, type, message) VALUES ($1,$2,$3,$4)',
-          [guardianId, id, 'police_update', msg]
-        );
-      }
-    } catch (notifyErr) {
-      // don't block the update if notification fails
-      console.error('Failed to create notification for guardian:', notifyErr.message || notifyErr);
+    res.status(201).json(result.rows[0]);
+  } catch (e) { next(e); }
+}
+
+/**
+ * POST /api/admin/cases/:id/guardian-note
+ * Owning guardian notifies admin/police when they have a case update.
+ */
+export async function addGuardianNote(req, res, next) {
+  try {
+    const schema = z.object({ note_text: z.string().min(3).max(1000) });
+    const { note_text } = schema.parse(req.body);
+    const { id } = req.params;
+
+    const caseCheck = await query('SELECT id, name, guardian_id FROM missing_persons WHERE id=$1', [id]);
+    const caseRow = caseCheck.rows[0];
+    if (!caseRow) return res.status(404).json({ message: 'Case not found' });
+    if (req.user.role !== 'guardian' || caseRow.guardian_id !== req.user.id) {
+      return res.status(403).json({ message: 'You can only send notes for cases you uploaded.' });
     }
 
-    res.status(201).json(result.rows[0]);
+    const recipients = await query(
+      "SELECT id FROM users WHERE role IN ('admin', 'police') AND verified = TRUE"
+    );
+    const notifications = [];
+    for (const recipient of recipients.rows) {
+      const inserted = await query(
+        'INSERT INTO notifications (user_id, case_id, type, message) VALUES ($1,$2,$3,$4) RETURNING *',
+        [
+          recipient.id,
+          id,
+          'request_info',
+          `${req.user.name} sent a guardian note for ${caseRow.name}: ${note_text.slice(0, 240)}`,
+        ]
+      );
+      notifications.push(inserted.rows[0]);
+    }
+
+    res.status(201).json({ message: 'Guardian note sent to admin and police.', notifications });
   } catch (e) { next(e); }
 }
 
@@ -52,6 +73,17 @@ export async function addPoliceUpdate(req, res, next) {
 export async function getPoliceUpdates(req, res, next) {
   try {
     const { id } = req.params;
+    const caseCheck = await query('SELECT guardian_id FROM missing_persons WHERE id=$1', [id]);
+    if (!caseCheck.rows[0]) return res.status(404).json({ message: 'Case not found' });
+
+    const canView =
+      req.user.role === 'admin' ||
+      req.user.role === 'police';
+
+    if (!canView) {
+      return res.status(403).json({ message: 'Only admin and police can view case update notes.' });
+    }
+
     const result = await query(
       `SELECT pu.*, u.name AS officer_name
        FROM police_updates pu

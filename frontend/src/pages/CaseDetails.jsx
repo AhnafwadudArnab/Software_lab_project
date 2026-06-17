@@ -8,6 +8,36 @@ import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
 
 const TIMELINE_ENTRY_FORM_INITIAL = { entry_time: '', location_text: '', lat: '', lng: '', notes: '' };
+const GUARDIAN_EDIT_FORM_INITIAL = {
+  reporter_phone: '',
+  last_seen_location: '',
+  last_seen_time: '',
+  clothing: '',
+  identifying_marks: '',
+  medical_info: '',
+  description: ''
+};
+
+function toDateTimeLocal(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function buildGuardianEditForm(item) {
+  if (!item) return GUARDIAN_EDIT_FORM_INITIAL;
+  return {
+    reporter_phone: item.reporter_phone || '',
+    last_seen_location: item.last_seen_location || '',
+    last_seen_time: toDateTimeLocal(item.last_seen_time),
+    clothing: item.clothing || '',
+    identifying_marks: item.identifying_marks || '',
+    medical_info: item.medical_info || '',
+    description: item.description || ''
+  };
+}
 
 export default function CaseDetails() {
   const { id } = useParams();
@@ -29,6 +59,13 @@ export default function CaseDetails() {
   const [timelineFormSubmitting, setTimelineFormSubmitting] = useState(false);
   // Found-person photos (Req 3)
   const [foundPhotos, setFoundPhotos] = useState([]);
+  const [guardianNote, setGuardianNote] = useState('');
+  const [guardianNoteStatus, setGuardianNoteStatus] = useState('');
+  const [guardianNoteSubmitting, setGuardianNoteSubmitting] = useState(false);
+  const [guardianEditOpen, setGuardianEditOpen] = useState(false);
+  const [guardianEditForm, setGuardianEditForm] = useState(GUARDIAN_EDIT_FORM_INITIAL);
+  const [guardianEditStatus, setGuardianEditStatus] = useState('');
+  const [guardianEditSaving, setGuardianEditSaving] = useState(false);
 
   // Fix #10: handle load errors instead of staying on "Loading..." forever
   useEffect(() => {
@@ -36,6 +73,11 @@ export default function CaseDetails() {
       .then(r => setItem(r.data))
       .catch(err => setError(err.response?.data?.message || 'Failed to load case. You may not have permission to view it.'));
   }, [id]);
+
+  useEffect(() => {
+    if (!item) return;
+    setGuardianEditForm(buildGuardianEditForm(item));
+  }, [item]);
 
   // Auto-locate user's device position on mount
   useEffect(() => {
@@ -130,6 +172,47 @@ export default function CaseDetails() {
     setTimelineFormSubmitting(false);
   }
 
+  async function submitGuardianNote(e) {
+    e.preventDefault();
+    if (!guardianNote.trim()) return;
+    setGuardianNoteSubmitting(true);
+    setGuardianNoteStatus('');
+    try {
+      await api.post(`/admin/cases/${id}/guardian-note`, { note_text: guardianNote });
+      setGuardianNote('');
+      setGuardianNoteStatus('Your note has been sent to admin and police.');
+    } catch (err) {
+      setGuardianNoteStatus(err.response?.data?.message || 'Failed to send note.');
+    } finally {
+      setGuardianNoteSubmitting(false);
+    }
+  }
+
+  async function submitGuardianEdit(e) {
+    e.preventDefault();
+    setGuardianEditSaving(true);
+    setGuardianEditStatus('');
+    try {
+      const payload = {
+        reporter_phone: guardianEditForm.reporter_phone.trim(),
+        last_seen_location: guardianEditForm.last_seen_location.trim(),
+        last_seen_time: guardianEditForm.last_seen_time || null,
+        clothing: guardianEditForm.clothing.trim() || null,
+        identifying_marks: guardianEditForm.identifying_marks.trim() || null,
+        medical_info: guardianEditForm.medical_info.trim() || null,
+        description: guardianEditForm.description.trim() || null
+      };
+      const r = await api.patch(`/cases/${id}/guardian-details`, payload);
+      setItem(prev => ({ ...prev, ...r.data }));
+      setGuardianEditForm(buildGuardianEditForm(r.data));
+      setGuardianEditStatus('Case details updated. Admin and police have been notified.');
+    } catch (err) {
+      setGuardianEditStatus(err.response?.data?.message || 'Failed to update case details.');
+    } finally {
+      setGuardianEditSaving(false);
+    }
+  }
+
   if (error) return (
     <>
       <Navbar />
@@ -147,9 +230,11 @@ export default function CaseDetails() {
 
   const image = item.images?.[0] || 'https://placehold.co/600x420?text=Missing+Person';
   const caseUrl = window.location.href;
+  const isFoundCase = item.status === 'found';
 
   // Tracking toggle is visible to admin/police only
-  const isOwnerOrGuardian = user && (user.role === 'admin' || user.role === 'police');
+  const canSendGuardianNote = !isFoundCase && user?.role === 'guardian' && item.guardian_id === user.id;
+  const canEditGuardianDetails = canSendGuardianNote;
 
   const movementTrail = movementAnalysis?.trail || [];
   const movementMarkers = movementTrail.length > 0
@@ -326,6 +411,19 @@ export default function CaseDetails() {
             <div className="row gap" style={{ flexWrap: 'wrap' }}>
               <Link className="btn danger" to={`/sighting/${item.id}`}>{t('case.saw_person')}</Link>
               <button className="btn outline" onClick={() => navigator.share?.({ title: item.name, url: caseUrl })}>{t('case.share')}</button>
+              {canEditGuardianDetails && (
+                <button
+                  className="btn outline"
+                  type="button"
+                  onClick={() => {
+                    setGuardianEditForm(buildGuardianEditForm(item));
+                    setGuardianEditStatus('');
+                    setGuardianEditOpen(open => !open);
+                  }}
+                >
+                  {guardianEditOpen ? 'Close Edit' : 'Edit Details'}
+                </button>
+              )}
               {/* AI match only for admin/police */}
               {user && (user.role === 'admin' || user.role === 'police') && (
                 <button className="btn outline" onClick={runAIMatch} disabled={loadingMatch}>
@@ -402,66 +500,235 @@ export default function CaseDetails() {
           </section>
         )}
 
-        <h2>Movement Pattern & Probable Area</h2>
-        {movementAnalysis && (
-          <section className="panel" style={{ padding: 18, marginBottom: 16 }}>
-            <div className="row between" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 280px' }}>
-                <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 800, textTransform: 'uppercase', marginBottom: 6 }}>
-                  Last seen route
-                </div>
-                <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--text)', lineHeight: 1.5 }}>
-                  {movementAnalysis.movement_pattern || 'Not enough verified sightings yet'}
+        {canEditGuardianDetails && guardianEditOpen && (
+          <section className="panel" style={{ marginBottom: 32, padding: 24 }}>
+            <div className="row between" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+              <div>
+                <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 20, fontWeight: 800 }}>
+                  Edit Case Details
+                </h2>
+                <p className="muted" style={{ margin: 0 }}>
+                  Name, age, gender, status, reporter relation, and photos are fixed here.
                 </p>
               </div>
-              {movementAnalysis.prediction && (
-                <div style={{ flex: '0 1 300px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>
-                    {movementAnalysis.prediction.mode === 'radius' ? 'Probable search radius' : 'AI/ML probable next area'}
-                  </div>
-                  <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--text)' }}>
-                    {movementAnalysis.prediction.area}
-                  </div>
-                  <div style={{ fontSize: 13, color: '#0369a1', marginTop: 4 }}>
-                    Confidence {movementAnalysis.prediction.confidence}%
-                    {movementAnalysis.prediction.mode === 'radius' && movementAnalysis.prediction.radius_km ? ` • Radius ${movementAnalysis.prediction.radius_km} km` : ''}
-                    {movementAnalysis.prediction.mode === 'route' && movementAnalysis.prediction.distance_km ? ` • Route ${movementAnalysis.prediction.distance_km} km` : ''}
-                  </div>
-                </div>
-              )}
+              <span className={`badge ${item.status}`}>{item.status}</span>
             </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 18 }}>
+              {[
+                ['Person', item.name],
+                ['Age', item.age],
+                ['Gender', item.gender],
+                ['Relation', item.reporter_relation]
+              ].filter(([, value]) => value).map(([label, value]) => (
+                <div key={label} style={{ background: 'var(--bg)', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 800, textTransform: 'uppercase', marginBottom: 3 }}>
+                    {label} • Fixed
+                  </div>
+                  <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 800 }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <form className="form-grid" onSubmit={submitGuardianEdit}>
+              <div className="form-row-2">
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                    Contact Phone
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={guardianEditForm.reporter_phone}
+                    onChange={e => setGuardianEditForm(f => ({ ...f, reporter_phone: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                    Last Seen Time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={guardianEditForm.last_seen_time}
+                    onChange={e => setGuardianEditForm(f => ({ ...f, last_seen_time: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  Last Seen Location
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={guardianEditForm.last_seen_location}
+                  onChange={e => setGuardianEditForm(f => ({ ...f, last_seen_location: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  Clothing
+                </label>
+                <textarea
+                  rows={3}
+                  value={guardianEditForm.clothing}
+                  onChange={e => setGuardianEditForm(f => ({ ...f, clothing: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  Identifying Marks
+                </label>
+                <textarea
+                  rows={3}
+                  value={guardianEditForm.identifying_marks}
+                  onChange={e => setGuardianEditForm(f => ({ ...f, identifying_marks: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  Medical Info
+                </label>
+                <textarea
+                  rows={3}
+                  value={guardianEditForm.medical_info}
+                  onChange={e => setGuardianEditForm(f => ({ ...f, medical_info: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  Description
+                </label>
+                <textarea
+                  rows={4}
+                  value={guardianEditForm.description}
+                  onChange={e => setGuardianEditForm(f => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              {guardianEditStatus && (
+                <p className={guardianEditStatus.includes('updated') ? 'muted' : 'error'} style={{ margin: 0 }}>
+                  {guardianEditStatus}
+                </p>
+              )}
+              <div className="row gap" style={{ flexWrap: 'wrap' }}>
+                <button
+                  className="btn"
+                  type="submit"
+                  disabled={
+                    guardianEditSaving ||
+                    !guardianEditForm.reporter_phone.trim() ||
+                    !guardianEditForm.last_seen_location.trim()
+                  }
+                >
+                  {guardianEditSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  className="btn outline"
+                  type="button"
+                  onClick={() => {
+                    setGuardianEditForm(buildGuardianEditForm(item));
+                    setGuardianEditStatus('');
+                    setGuardianEditOpen(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </section>
         )}
-        <MapView
-          center={mapCenter}
-          markers={markers}
-          polyline={movementAnalysis?.prediction?.mode === 'radius' ? null : movementPolyline.length > 1 ? movementPolyline : locationTrail}
-          circles={movementCircles}
-        />
 
-        <h2>{t('case.timeline_title')}</h2>
-        {/* Task 18.1: Display case timeline entries from the API */}
-        <div className="timeline">
-          {timelineEntries.length === 0 && (
-            <p className="muted">No timeline entries yet.</p>
-          )}
-          {timelineEntries.map(entry => (
-            <div className="timeline-item" key={entry.id}>
-              <div className="row between" style={{ flexWrap: 'wrap', gap: 6 }}>
-                <b>{new Date(entry.entry_time).toLocaleString()}</b>
-                <span className="muted" style={{ fontSize: 13 }}>{entry.location_text}</span>
-              </div>
-              {entry.notes && <p style={{ margin: '6px 0 0', fontSize: 14 }}>{entry.notes}</p>}
+        {canSendGuardianNote && (
+          <section className="panel" style={{ marginBottom: 32, padding: 24 }}>
+            <h2 style={{ marginTop: 0, marginBottom: 10, fontSize: 20, fontWeight: 800 }}>
+              Send Note to Admin / Police
+            </h2>
+            <p className="muted" style={{ marginTop: 0 }}>
+              If the missing person has returned home or you have an important update, send a note to the authority team.
+            </p>
+            <form onSubmit={submitGuardianNote}>
+              <textarea
+                value={guardianNote}
+                onChange={e => setGuardianNote(e.target.value)}
+                placeholder="Write your update here..."
+                rows={4}
+                required
+                style={{ width: '100%', boxSizing: 'border-box', marginBottom: 10 }}
+              />
+              {guardianNoteStatus && (
+                <p className={guardianNoteStatus.includes('sent') ? 'muted' : 'error'} style={{ margin: '0 0 10px' }}>
+                  {guardianNoteStatus}
+                </p>
+              )}
+              <button className="btn" type="submit" disabled={guardianNoteSubmitting || !guardianNote.trim()}>
+                {guardianNoteSubmitting ? 'Sending...' : 'Send Note'}
+              </button>
+            </form>
+          </section>
+        )}
+
+        {!isFoundCase && (
+          <>
+            <h2>Movement Pattern & Probable Area</h2>
+            {movementAnalysis && (
+              <section className="panel" style={{ padding: 18, marginBottom: 16 }}>
+                <div className="row between" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 280px' }}>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 800, textTransform: 'uppercase', marginBottom: 6 }}>
+                      Last seen route
+                    </div>
+                    <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--text)', lineHeight: 1.5 }}>
+                      {movementAnalysis.movement_pattern || 'Not enough verified sightings yet'}
+                    </p>
+                  </div>
+                  {movementAnalysis.prediction && (
+                    <div style={{ flex: '0 1 300px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>
+                        {movementAnalysis.prediction.mode === 'radius' ? 'Probable search radius' : 'AI/ML probable next area'}
+                      </div>
+                      <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--text)' }}>
+                        {movementAnalysis.prediction.area}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#0369a1', marginTop: 4 }}>
+                        Confidence {movementAnalysis.prediction.confidence}%
+                        {movementAnalysis.prediction.mode === 'radius' && movementAnalysis.prediction.radius_km ? ` • Radius ${movementAnalysis.prediction.radius_km} km` : ''}
+                        {movementAnalysis.prediction.mode === 'route' && movementAnalysis.prediction.distance_km ? ` • Route ${movementAnalysis.prediction.distance_km} km` : ''}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+            <MapView
+              center={mapCenter}
+              markers={markers}
+              polyline={movementAnalysis?.prediction?.mode === 'radius' ? null : movementPolyline.length > 1 ? movementPolyline : locationTrail}
+              circles={movementCircles}
+            />
+
+            <h2>{t('case.timeline_title')}</h2>
+            {/* Task 18.1: Display case timeline entries from the API */}
+            <div className="timeline">
+              {timelineEntries.length === 0 && (
+                <p className="muted">No timeline entries yet.</p>
+              )}
+              {timelineEntries.map(entry => (
+                <div className="timeline-item" key={entry.id}>
+                  <div className="row between" style={{ flexWrap: 'wrap', gap: 6 }}>
+                    <b>{new Date(entry.entry_time).toLocaleString()}</b>
+                    <span className="muted" style={{ fontSize: 13 }}>{entry.location_text}</span>
+                  </div>
+                  {entry.notes && <p style={{ margin: '6px 0 0', fontSize: 14 }}>{entry.notes}</p>}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* Task 18.2: Add Timeline Entry form — visible to admin/police only */}
-        {user && (user.role === 'admin' || user.role === 'police') && (
-          <section className="timeline-entry-form" style={{ marginTop: 24 }}>
-            <h3 style={{ marginBottom: 14 }}>Add Timeline Entry</h3>
-            <form className="form-grid" onSubmit={handleTimelineSubmit}>
-              <div className="form-row-2">
+            {/* Task 18.2: Add Timeline Entry form — visible to admin/police only */}
+            {user && (user.role === 'admin' || user.role === 'police') && (
+              <section className="timeline-entry-form" style={{ marginTop: 24 }}>
+                <h3 style={{ marginBottom: 14 }}>Add Timeline Entry</h3>
+                <form className="form-grid" onSubmit={handleTimelineSubmit}>
+                  <div className="form-row-2">
                 <div>
                   <label style={{ display: 'block', fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
                     Date &amp; Time <span style={{ color: 'var(--red)' }}>*</span>
@@ -562,8 +829,10 @@ export default function CaseDetails() {
                   {timelineFormSubmitting ? 'Adding...' : '+ Add Entry'}
                 </button>
               </div>
-            </form>
-          </section>
+                </form>
+              </section>
+            )}
+          </>
         )}
       </main>
     </>

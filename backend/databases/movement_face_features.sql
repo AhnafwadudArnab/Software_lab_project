@@ -45,7 +45,7 @@ ALTER TABLE notifications
 
 ALTER TABLE notifications
   ADD CONSTRAINT notifications_type_check
-  CHECK (type IN ('request_info', 'found_person_photo', 'new_sighting', 'face_match'));
+  CHECK (type IN ('request_info', 'found_person_photo', 'new_sighting', 'face_match', 'guardian_note', 'police_update'));
 
 CREATE TABLE IF NOT EXISTS sighting_face_scans (
   id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

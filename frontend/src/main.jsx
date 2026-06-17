@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import PoliceDashboard from './pages/PoliceDashboard';
+import UserProfile from './pages/UserProfile';
 import ReportCase from './pages/ReportCase';
 import CaseDetails from './pages/CaseDetails';
 import SubmitSighting from './pages/SubmitSighting';
@@ -48,6 +49,11 @@ createRoot(document.getElementById('root')).render(
               <Route path="/police" element={
                 <ProtectedRoute>
                   <PoliceDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/profile" element={
+                <ProtectedRoute>
+                  <UserProfile />
                 </ProtectedRoute>
               } />
             </Routes>

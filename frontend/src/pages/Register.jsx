@@ -10,7 +10,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
-  const { t } = useLang();
+  const { lang, setLang, t } = useLang();
   const nav = useNavigate();
 
   function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })); }
@@ -37,7 +37,7 @@ export default function Register() {
     }
   }
 
-  // Public registration creates guardian accounts; police/admin are created by admins.
+  // Public registration creates viewer accounts; uploading a case promotes the user to guardian.
 
   return (
     <div className="auth-page">
@@ -54,15 +54,15 @@ export default function Register() {
               <div className="auth-left-stat">
                 <span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
                 <div>
-                  <b>File Reports</b>
-                  <p>Submit missing person cases instantly</p>
+                  <b>Browse Cases</b>
+                  <p>Follow public alerts and submit a case when needed</p>
                 </div>
               </div>
               <div className="auth-left-stat">
                 <span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
                 <div>
-                  <b>Track Cases</b>
-                  <p>Follow updates on your dashboard</p>
+                  <b>Become Guardian</b>
+                  <p>Case uploaders receive authority updates</p>
                 </div>
               </div>
               <div className="auth-left-stat">
@@ -81,6 +81,16 @@ export default function Register() {
       {/* Right Panel */}
       <div className="auth-right">
         <div className="auth-form-card auth-form-card-wide">
+          <div className="auth-top-actions">
+            <button
+              type="button"
+              className="auth-lang-toggle"
+              onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
+              aria-label="Toggle language"
+            >
+              {lang === 'en' ? 'বাংলা' : 'EN'}
+            </button>
+          </div>
           <div className="auth-form-header">
             <div className="auth-form-icon-svg">
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>

@@ -219,7 +219,7 @@ export default function Home() {
         <div className="home-footer-inner">
           <div className="home-footer-brand">
             <span className="home-footer-logo">
-              <img src={logoGif} alt="Missing Diary" style={{ width: 280, height: 96, objectFit: 'contain', mixBlendMode: 'screen', filter: 'brightness(1.2)' }} />
+              <img src={logoGif} alt="Missing Diary" />
             </span>
             <p>{t('home.footer_brand')}</p>
           </div>

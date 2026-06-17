@@ -46,7 +46,7 @@ export default function MovementMapDropdown({ cases = [], initialCaseId = '' }) 
       lat: point.lat,
       lng: point.lng,
       title: point.source === 'last_seen' ? selectedCase?.name || 'Last seen' : `${selectedCase?.name || 'Person'} seen`,
-      description: `${point.location_text || point.description || ''} • ${formatDate(point.observed_at)}`,
+      description: `${point.location_text || point.description || ''} • ${point.status || (point.source === 'last_seen' ? 'last seen' : 'sighting')} • ${formatDate(point.observed_at)}`,
     }));
     const predictionMarker = prediction && prediction.mode !== 'radius' ? [{
       lat: prediction.lat,
@@ -83,18 +83,26 @@ export default function MovementMapDropdown({ cases = [], initialCaseId = '' }) 
         <select
           value={caseId}
           onChange={e => setCaseId(e.target.value)}
+          disabled={cases.length === 0}
           style={{ minWidth: 260, padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--border)', background: 'white', fontWeight: 700 }}
         >
+          {cases.length === 0 && <option value="">No cases available</option>}
           {cases.map(c => (
             <option key={c.id} value={c.id}>{c.name} - {c.id}</option>
           ))}
         </select>
       </div>
 
+      {cases.length === 0 && (
+        <div className="db-empty">
+          <p>No cases available for movement history.</p>
+        </div>
+      )}
+
       {error && <div className="rc-error" style={{ marginBottom: 12 }}>{error}</div>}
       {loading && <p className="muted">Loading movement history...</p>}
 
-      {!loading && analysis && (
+      {cases.length > 0 && !loading && analysis && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(220px, 320px)', gap: 14, marginBottom: 14 }}>
             <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px' }}>
@@ -133,7 +141,7 @@ export default function MovementMapDropdown({ cases = [], initialCaseId = '' }) 
                 <div>
                   <div style={{ fontWeight: 800 }}>{point.location_text || 'Unknown location'}</div>
                   <div className="muted" style={{ fontSize: 12 }}>
-                    {point.source === 'last_seen' ? 'Original last seen' : 'Witness GPS report'} • {formatDate(point.observed_at)}
+                    {point.source === 'last_seen' ? 'Original last seen' : `Witness GPS report${point.status ? ` (${point.status})` : ''}`} • {formatDate(point.observed_at)}
                     {point.face_match_score != null ? ` • Face match ${Number(point.face_match_score).toFixed(1)}%` : ''}
                   </div>
                 </div>

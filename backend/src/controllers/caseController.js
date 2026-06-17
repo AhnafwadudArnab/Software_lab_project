@@ -26,6 +26,25 @@ const caseSchema = z.object({
 });
 
 const PUBLIC_STATUSES = ['active', 'verified', 'found', 'closed'];
+const guardianCaseUpdateSchema = z.object({
+  reporter_phone: z.string().trim().min(5).max(30).optional(),
+  last_seen_location: z.string().trim().min(2).max(255).optional(),
+  last_seen_time: z.string().optional().nullable(),
+  clothing: z.string().trim().max(500).optional().nullable(),
+  identifying_marks: z.string().trim().max(500).optional().nullable(),
+  medical_info: z.string().trim().max(500).optional().nullable(),
+  description: z.string().trim().max(1500).optional().nullable()
+}).strict();
+
+const GUARDIAN_EDITABLE_FIELDS = [
+  'reporter_phone',
+  'last_seen_location',
+  'last_seen_time',
+  'clothing',
+  'identifying_marks',
+  'medical_info',
+  'description'
+];
 
 export async function listCases(req, res, next) {
   try {
@@ -48,8 +67,8 @@ export async function listCases(req, res, next) {
       return res.json(result.rows);
     }
 
-    // Logged-in user requesting only their own cases
-    if (user && mine) {
+    // Personal dashboard: normal users see only cases they uploaded.
+    if (user && (user.role === 'guardian' || user.role === 'viewer') && mine) {
       const result = await query(
         'SELECT mp.*, COALESCE(json_agg(pi.image_url) FILTER (WHERE pi.image_url IS NOT NULL), \'[]\') AS images ' +
         'FROM missing_persons mp LEFT JOIN person_images pi ON pi.missing_person_id = mp.id ' +
@@ -88,11 +107,13 @@ export async function getCase(req, res, next) {
     const user = req.user;
     const c = result.rows[0];
 
-    // Police may access all cases (they need to see found/closed cases they worked on)
-    // Only truly restrict non-authenticated public access via PUBLIC_STATUSES in listCases
+    const isPrivileged = user && (user.role === 'admin' || user.role === 'police');
+    const isOwner = user && c.guardian_id === user.id;
+    if (!isPrivileged && !isOwner && !PUBLIC_STATUSES.includes(c.status)) {
+      return res.status(403).json({ message: 'This case is not public yet.' });
+    }
 
     // Admin/police see all sightings; everyone else sees only verified sightings
-    const isPrivileged = user && (user.role === 'admin' || user.role === 'police');
     const sightings = (await query(
       isPrivileged
         ? 'SELECT * FROM sightings WHERE missing_person_id=$1 ORDER BY created_at DESC'
@@ -138,6 +159,10 @@ export async function createCase(req, res, next) {
       ]
     );
     const created = result.rows[0];
+    if (req.user?.id && req.user.role === 'viewer') {
+      await query('UPDATE users SET role=$1 WHERE id=$2 AND role=$3', ['guardian', req.user.id, 'viewer']);
+      req.user.role = 'guardian';
+    }
     const files = req.files || [];
     let firstImage = true;
     for (const f of files) {
@@ -163,6 +188,70 @@ export async function deleteCase(req, res, next) {
   } catch (e) { next(e); }
 }
 
+export async function updateGuardianCaseDetails(req, res, next) {
+  try {
+    const data = guardianCaseUpdateSchema.parse(req.body);
+    const entries = Object.entries(data).filter(([, value]) => value !== undefined);
+    if (entries.length === 0) {
+      return res.status(400).json({ message: 'No editable details were provided.' });
+    }
+
+    const existing = await query(
+      'SELECT id,name,guardian_id FROM missing_persons WHERE id=$1',
+      [req.params.id]
+    );
+    const currentCase = existing.rows[0];
+    if (!currentCase) return res.status(404).json({ message: 'Case not found' });
+    if (currentCase.guardian_id !== req.user.id) {
+      return res.status(403).json({ message: 'You can edit only your own uploaded case.' });
+    }
+
+    const params = [];
+    const sets = entries.map(([field, value]) => {
+      if (!GUARDIAN_EDITABLE_FIELDS.includes(field)) {
+        throw new Error(`Field ${field} is not editable by guardian`);
+      }
+      params.push(value === '' ? null : value);
+      return `${field}=$${params.length}`;
+    });
+    params.push(req.params.id);
+
+    const result = await query(
+      `UPDATE missing_persons SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${params.length} RETURNING *`,
+      params
+    );
+    const updatedCase = result.rows[0];
+
+    await query(
+      'INSERT INTO audit_logs (user_id,action,target_type,target_id,notes) VALUES ($1,$2,$3,$4,$5)',
+      [
+        req.user.id,
+        'Guardian updated case details',
+        'missing_person',
+        req.params.id,
+        entries.map(([field]) => field).join(', ')
+      ]
+    );
+
+    const recipients = (await query(
+      "SELECT id FROM users WHERE role IN ('admin','police') AND verified=TRUE"
+    )).rows;
+    for (const recipient of recipients) {
+      await query(
+        'INSERT INTO notifications (user_id,case_id,type,message) VALUES ($1,$2,$3,$4)',
+        [
+          recipient.id,
+          req.params.id,
+          'request_info',
+          `Guardian updated details for case ${currentCase.name}.`
+        ]
+      );
+    }
+
+    res.json(updatedCase);
+  } catch (e) { next(e); }
+}
+
 export async function updateCaseStatus(req, res, next) {
   try {
     const schema = z.object({
@@ -177,17 +266,6 @@ export async function updateCaseStatus(req, res, next) {
       'INSERT INTO audit_logs (user_id,action,target_type,target_id,notes) VALUES ($1,$2,$3,$4,$5)',
       [req.user.id, 'Updated case status to ' + status, 'missing_person', req.params.id, notes || null]
     );
-    if (status === 'found' && updatedCase.guardian_id) {
-      await query(
-        `INSERT INTO notifications (user_id, case_id, type, message)
-         VALUES ($1, $2, 'found_person_photo', $3)`,
-        [
-          updatedCase.guardian_id,
-          req.params.id,
-          `Police/Admin confirmed that ${updatedCase.name} has been found.`,
-        ]
-      );
-    }
     res.json(updatedCase);
   } catch (e) { next(e); }
 }

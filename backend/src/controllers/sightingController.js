@@ -547,11 +547,17 @@ export async function getSightingHistory(req, res, next) {
         mp.name               AS matched_person_name,
         mp.last_seen_location AS matched_person_last_seen
       FROM sightings s
-      LEFT JOIN sighting_face_scans fs ON fs.sighting_id = s.id
+      LEFT JOIN LATERAL (
+        SELECT id, face_match_score, scan_status, scanned_image_url, created_at, matched_person_id
+        FROM sighting_face_scans
+        WHERE sighting_id = s.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) fs ON TRUE
       LEFT JOIN missing_persons mp     ON mp.id = fs.matched_person_id
       WHERE s.missing_person_id = $1
       ${statusFilter}
-      ORDER BY s.created_at DESC`,
+      ORDER BY COALESCE(s.sighted_at, s.created_at) DESC`,
       [caseId]
     );
 
@@ -579,6 +585,11 @@ export async function getMovementAnalysis(req, res, next) {
     const caseRow = caseResult.rows[0];
     if (!caseRow) return res.status(404).json({ message: 'Case not found' });
 
+    const isPrivileged = req.user && (req.user.role === 'admin' || req.user.role === 'police');
+    const visibilityFilter = isPrivileged
+      ? ''
+      : "AND (s.status='verified' OR fs.scan_status='matched')";
+
     const sightingsResult = await query(
       `SELECT
         s.id,
@@ -600,7 +611,7 @@ export async function getMovementAnalysis(req, res, next) {
          LIMIT 1
        ) fs ON TRUE
        WHERE s.missing_person_id=$1
-         AND (s.status='verified' OR fs.scan_status='matched')
+         ${visibilityFilter}
        ORDER BY COALESCE(s.sighted_at, s.created_at) ASC`,
       [caseId]
     );
@@ -617,6 +628,7 @@ export async function getMovementAnalysis(req, res, next) {
         source: 'verified_sighting',
         title: `Sighting ${index + 1}`,
         description: row.description,
+        status: row.status,
         face_match_score: row.face_match_score,
         scan_status: row.scan_status,
       })),

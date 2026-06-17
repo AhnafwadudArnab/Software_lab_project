@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { createCase, getCase, listCases, updateCaseStatus, deleteCase, getCaseAudit, approveCase, rejectCase, requestInfo } from '../controllers/caseController.js';
+import { createCase, getCase, listCases, updateCaseStatus, updateGuardianCaseDetails, deleteCase, getCaseAudit, approveCase, rejectCase, requestInfo } from '../controllers/caseController.js';
 import { requireAuth, requireRole, optionalAuth } from '../middleware/auth.js';
 import { policeStatusGuard } from '../middleware/policeStatusGuard.js';
 import { upload } from '../utils/upload.js';
@@ -47,6 +47,9 @@ router.post('/', optionalAuth, upload.array('images', 5), createCase);
 
 // PATCH /cases/:id/status — admin/police only; police restricted to 'found' or 'active'
 router.patch('/:id/status', requireAuth, requireRole('admin', 'police'), policeStatusGuard, updateCaseStatus);
+
+// PATCH /cases/:id/guardian-details — guardian can edit only their own changeable details
+router.patch('/:id/guardian-details', requireAuth, requireRole('guardian'), updateGuardianCaseDetails);
 
 // DELETE /cases/:id — admin only
 router.delete('/:id', requireAuth, requireRole('admin'), deleteCase);
